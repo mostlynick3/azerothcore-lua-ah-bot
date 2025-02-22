@@ -6,7 +6,7 @@
 -- Features: * Plug and Play *, * Extensive filters *, * Buyer *, * Seller *, * Both bids and buyouts *, * and more *
 -- This module is compatible with all Eluna versions that support async DB queries.
 -- Made for Yggdrasil WotLK / AzerothCore. 
--- You may freely use this file for emulation purposes. It is released under this repository's AGPL v3 license: <link>
+-- You may freely use this file for emulation purposes. It is released under this repository's GPL v3 license: https://github.com/mostlynick3/azerothcore-lua-ah-bot
 --
 -------------------------------------------------------------------------------------------------------------------------
 -- AH Bot Configs
