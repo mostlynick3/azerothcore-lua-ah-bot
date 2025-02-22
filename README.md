@@ -61,5 +61,5 @@
 <h2>AzerothCore Module Details</h2>
 <p>Author: mostlynick3</p>
 <p>Repository: <a href="https://github.com/mostlynick3/azerothcore-lua-ah-bot" target="_blank">https://github.com/mostlynick3/azerothcore-lua-ah-bot</a>.</p>
-<p>Download: <a href="https://github.com/mostlynick3/azerothcore-lua-ah-bot.git" target="_blank">https://github.com/mostlynick3/azerothcore-lua-ah-bot.git</a>.</p>
+<p>Download ZIP: <a href="https://github.com/mostlynick3/azerothcore-lua-ah-bot/archive/refs/heads/main.zip" target="_blank">https://github.com/mostlynick3/azerothcore-lua-ah-bot/archive/refs/heads/main.zip</a>.</p>
 <p>License: GPL-3.0</p>
