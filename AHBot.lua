@@ -13,14 +13,14 @@
 -------------------------------------------------------------------------------------------------------------------------
 
 local EnableAHBot			= true			-- Default: True. If false, AH bot is disabled. 
-local AHBots				= {1, 2, 3, 4}	-- Default: 1, 2, 3, 4. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
-local EnabledAuctionHouses	= {2, 6}		-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
+local AHBots				= {1391}		-- Default: 1, 2, 3, 4, 5. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
+local EnabledAuctionHouses	= {7}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
 local AHBotActionDebug		= true			-- Default: False. Enables various action debug prints. Critical prints will still be active even if false.
 local AHBotItemDebug		= false			-- Default: False. Enables debug prints on item handling, cost per item entry, Quality, etc.
 local ActionsPerCycle		= 500			-- Default: 500 (items). The higher the value, the faster the bots fill the AH up to the min auctions limit and the more items they buy, at the expense of performance.
 local StartupDelay 			= 1000			-- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
 local EnableGMMessages		= true			-- Default: True. Messages all online GMs on command and initiation events.
-local AnnounceOnLogin		= true			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
+local AnnounceOnLogin		= false			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Buyer Configs
@@ -1205,7 +1205,7 @@ local function AHBot_BuyAuction()
 			auctionResults = tempResults
 		end
 		
-        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. count .. " potential auctions to process") end
+        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #auctionResults .. " potential auctions to process") end
 
         local itemGuids = {}
         for _, auction in ipairs(auctionResults) do
@@ -1360,6 +1360,7 @@ end
 ---------------------------------------------------------------------------------
 
 local currentHouse = 0
+local lastAuctionId
 
 local function AddAuctions(specificHouse)
 	local houseId = 0
@@ -1381,8 +1382,29 @@ local function AddAuctions(specificHouse)
 				local lastItemId = itemResult:GetUInt32(0)
 				if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found start item GUID for next batch of instantiations: ".. lastItemId) end
 				
-				CharDBQueryAsync("SELECT MAX(id) FROM auctionhouse", function(auctionResult)
-					local lastAuctionId = auctionResult:GetUInt32(0)
+				CharDBQueryAsync("SELECT MIN(id), MAX(id) FROM auctionhouse", function(result)
+					local minId = result:GetUInt32(0)
+					local maxId = result:GetUInt32(1)
+					local UINT32_MAX = 4294967295
+					local INCREMENT = 10000000
+				   
+					if not lastAuctionId then 
+						if minId > INCREMENT then
+							lastAuctionId = 1
+						else
+							for i = 1, 4190 do -- Goes up to 4.1B (safely below uint32 max)
+								local threshold = i * INCREMENT
+								if maxId < threshold then
+									lastAuctionId = threshold
+									break
+								end
+							end
+							if not lastAuctionId then
+								lastAuctionId = 1 -- Fallback if everything else is too high
+							end
+						end
+					end
+					
 					if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found start auction ID for next batch of inserts: " .. lastAuctionId) end
 					
 					local itemQueryParts = {}
@@ -1739,17 +1761,17 @@ local function AHBot_Cmd(event, player, command)
 	local name = player:GetName()
 	if command:lower() == "ahbot" or command == "ahbot options" or command == "ahbot help" then
 		player:SendBroadcastMessage(" ")
-		player:SendBroadcastMessage("[Eluna AH Bot]: Welcome to the Eluna AH bot menu. Possible subcommands:")
-		player:SendBroadcastMessage(".ahbot info: Displays statistics about the auction house bot.")
-		player:SendBroadcastMessage(".ahbot auctions expire <auction_house_ID/all>: Expires all auctions per house (2/6/7) or all houses.")
-		player:SendBroadcastMessage(".ahbot auctions add: Force adds a batch of ".. ActionsPerCycle .." auctions to all auction houses.")
-		player:SendBroadcastMessage(".ahbot auctions buy: Force buys a random batch of auctions from all auction houses.")
-		player:SendBroadcastMessage(".ahbot stop: Removes the scheduled auction bot events.")
-		player:SendBroadcastMessage(".ahbot start: Starts the auction bot, if stopped.")
-		player:SendBroadcastMessage(".ahbot pause <hours>: Pauses the auction bot for the specified number of hours.")
-		player:SendBroadcastMessage(".ahbot set batchsize <number>: Changes how many items the auction bots processes per cycle.")
-		player:SendBroadcastMessage(".ahbot set buycycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
-		player:SendBroadcastMessage(".ahbot set sellcycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
+		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Welcome to the Eluna AH bot menu. Possible subcommands:")
+		player:SendBroadcastMessage("|- .ahbot info: Displays statistics about the auction house bot.")
+		player:SendBroadcastMessage("|- .ahbot auctions expire <auction_house_ID/all>: Expires all auctions per house (2/6/7) or all houses.")
+		player:SendBroadcastMessage("|- .ahbot auctions add: Force adds a batch of ".. ActionsPerCycle .." auctions to all auction houses.")
+		player:SendBroadcastMessage("|- .ahbot auctions buy: Force buys a random batch of auctions from all auction houses.")
+		player:SendBroadcastMessage("|- .ahbot stop: Removes the scheduled auction bot events.")
+		player:SendBroadcastMessage("|- .ahbot start: Starts the auction bot, if stopped.")
+		player:SendBroadcastMessage("|- .ahbot pause <hours>: Pauses the auction bot for the specified number of hours.")
+		player:SendBroadcastMessage("|- .ahbot set batchsize <number>: Changes how many items the auction bots processes per cycle.")
+		player:SendBroadcastMessage("|- .ahbot set buycycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
+		player:SendBroadcastMessage("|- .ahbot set sellcycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
 		return false
 		
 	elseif command:lower() == "ahbot info" then
@@ -1759,14 +1781,14 @@ local function AHBot_Cmd(event, player, command)
 				table.insert(auctionInfo, string.format("House ID: %d -> Auctions: %s", houseId, count))
 			end
 		end
-		player:SendBroadcastMessage("[Eluna AH Bot]: ---------- INFO ----------")
-		player:SendBroadcastMessage("Auction house IDs with active bots (2 = ally, 6 = horde, 7 = neutral): ".. houseList)
-		player:SendBroadcastMessage("Active bot GUID lows: ".. botList)
-		player:SendBroadcastMessage("Min bot auctions: "..MinAuctions..". Max bot auctions: "..MaxAuctions..".")
-		player:SendBroadcastMessage("Number of possible items in auction house pool: ".. ItemTemplateSize)
-		player:SendBroadcastMessage("Bot items on auction houses on last cycle: "..(table.concat(auctionInfo, ", ")))
-		player:SendBroadcastMessage("Next auction house bot sell cycle (hours:minutes): ".. os.date("%H:%M", NextAHBotSellCycle))
-		player:SendBroadcastMessage("Next auction house bot buy cycle: Every ".. 60 * AHBuyTimer .." minutes.")
+		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: ---------- INFO ----------")
+		player:SendBroadcastMessage("|- Auction house IDs with active bots (2 = ally, 6 = horde, 7 = neutral): ".. houseList)
+		player:SendBroadcastMessage("|- Active bot GUID lows: ".. botList)
+		player:SendBroadcastMessage("|- Min bot auctions: "..MinAuctions..". Max bot auctions: "..MaxAuctions..".")
+		player:SendBroadcastMessage("|- Number of possible items in auction house pool: ".. ItemTemplateSize)
+		player:SendBroadcastMessage("|- Bot items on auction houses on last cycle: "..(table.concat(auctionInfo, ", ")))
+		player:SendBroadcastMessage("|- Next auction house bot sell cycle (hours:minutes): ".. os.date("%H:%M", NextAHBotSellCycle))
+		player:SendBroadcastMessage("|- Next auction house bot sell cycle: in " .. math.ceil((NextAHBotSellCycle - os.time()) / 60) .. " minutes")
 		local status
 		if AHBotSellEventId then status = "Online" else status = "Offline" end
 		player:SendBroadcastMessage("Status auction house bot seller service: "..status)
@@ -1835,7 +1857,7 @@ local function AHBot_Cmd(event, player, command)
 		return false
 		
 	elseif command:lower() == "ahbot stop" then
-		player:SendBroadcastMessage("[Eluna AH Bot]: Syntax error. Please use either '.ahbot stop sell' or '.ahbot stop buy'.")
+		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Please use either '.ahbot stop sell' or '.ahbot stop buy'.")
 		return false
 	elseif command:lower() == "ahbot stop sell" then
 		RemoveEventById(AHBotSellEventId)
@@ -1853,7 +1875,7 @@ local function AHBot_Cmd(event, player, command)
 		return false
 		
 	elseif command:lower() == "ahbot pause" then
-		player:SendBroadcastMessage("[Eluna AH Bot]: Invalid pause time! Please specify a duration between 1 to 24 hours.")
+		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid pause time! Please specify a duration between 1 to 24 hours.")
 		return false
 	elseif command:find("ahbot pause ") then
 		local _, _, pauseTime = command:find("ahbot pause (%d+)")
@@ -1867,7 +1889,7 @@ local function AHBot_Cmd(event, player, command)
 			SendMessageToGMs("GM "..name.." has paused all auction house bots for "..pauseTime.." hours.")
 			print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." just paused the auction bot for " .. pauseTime .. " hours.")
 		else
-			player:SendBroadcastMessage("[Eluna AH Bot]: Invalid pause time! Please specify a number between 1 and 24.")
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid pause time! Please specify a number between 1 and 24.")
 		end
 		return false
 		
@@ -1879,7 +1901,7 @@ local function AHBot_Cmd(event, player, command)
 			SendMessageToGMs("GM "..name.." has set the auction house bots' batch size to "..batchsize..".")
 			print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." just changed the auction bot's batch size to "..batchsize..".")
 		else
-			player:SendBroadcastMessage("[Eluna AH Bot]: Invalid batch size! Please specify a number between 1 and "..MaxAuctions..".")
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid batch size! Please specify a number between 1 and "..MaxAuctions..".")
 		end
 		return false
 		
@@ -1891,7 +1913,7 @@ local function AHBot_Cmd(event, player, command)
 			SendMessageToGMs("GM "..name.." has set the auction house bot's sell cycle time has been set to "..hours.." hours. Next cycle is in "..hours.." hour(s) from now.")
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just changed the auction bot's sell cycle time to "..hours.." hour(s).")
 		else
-			player:SendBroadcastMessage("[Eluna AH Bot]: Invalid sell cycle time! Please specify a number between 1 and 48.")
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid sell cycle time! Please specify a number between 1 and 48.")
 		end
 		return false
 	elseif command:find("ahbot set buycycle ") then
@@ -1901,12 +1923,12 @@ local function AHBot_Cmd(event, player, command)
 			SendMessageToGMs("GM "..name.." has set the auction house bot's buy cycle time has been set to %.1f minutes. Next cycle is in %.1f minutes from now.", 60 * hours, 60 * hours)
 			print(string.format("[Eluna AH Bot]: GM %d just changed the auction bot's buy cycle time to %.1f minutes.", player:GetGUIDLow(), 60 * hours))
 		else
-			player:SendBroadcastMessage("[Eluna AH Bot]: Invalid buy cycle time! Please specify a number between 0.1 and 48.")
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid buy cycle time! Please specify a number between 0.1 and 48.")
 		end
 		return false
 			
 	elseif command:lower() == "ahbot start" then
-		player:SendBroadcastMessage("[Eluna AH Bot]: Incorrect syntax. Use either '.ahbot start sell' or '.ahbot start buy'.")
+		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Incorrect syntax. Use either '.ahbot start sell' or '.ahbot start buy'.")
 		return false
 	elseif command:lower() == "ahbot start buy" then
 		if not AHBotBuyEventId then
@@ -1915,7 +1937,7 @@ local function AHBot_Cmd(event, player, command)
 			SendMessageToGMs("GM "..name.." has just started the auction house buyer bot.")
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just started the auction bot buyer.")
 		else
-			player:SendBroadcastMessage("[Eluna AH Bot]: Auction house buyer has already been started. No action taken.")
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Auction house buyer has already been started. No action taken.")
 		end
 		return false
 	elseif command:lower() == "ahbot start sell" then
@@ -1925,12 +1947,12 @@ local function AHBot_Cmd(event, player, command)
 			SendMessageToGMs("GM "..name.." has just started the auction house seller bot.")
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just started the auction bot seller.")
 		else
-			player:SendBroadcastMessage("[Eluna AH Bot]: Auction house seller has already been started. No action taken.")
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Auction house seller has already been started. No action taken.")
 		end
 		return false
 	
 	elseif command:find("ahbot.+") then
-		player:SendBroadcastMessage("[Eluna AH Bot]: Syntax error. Type .ahbot to see available commands.")
+		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Type .ahbot to see available commands.")
 		return false
 	end
 end
