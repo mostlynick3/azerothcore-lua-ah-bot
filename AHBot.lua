@@ -13,14 +13,14 @@
 -------------------------------------------------------------------------------------------------------------------------
 
 local EnableAHBot			= true			-- Default: True. If false, AH bot is disabled. 
-local AHBots				= {1, 2, 3}		-- Default: 1, 2, 3. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
-local EnabledAuctionHouses	= {2, 6}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
+local AHBots				= {1391}		-- Default: 1, 2, 3, 4, 5. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
+local EnabledAuctionHouses	= {7}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
 local AHBotActionDebug		= true			-- Default: False. Enables various action debug prints. Critical prints will still be active even if false.
 local AHBotItemDebug		= false			-- Default: False. Enables debug prints on item handling, cost per item entry, Quality, etc.
 local ActionsPerCycle		= 500			-- Default: 500 (items). The higher the value, the faster the bots fill the AH up to the min auctions limit and the more items they buy, at the expense of performance.
 local StartupDelay 			= 1000			-- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
 local EnableGMMessages		= true			-- Default: True. Messages all online GMs on command and initiation events.
-local AnnounceOnLogin		= true			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
+local AnnounceOnLogin		= false			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Buyer Configs
@@ -169,6 +169,13 @@ local function TagElunaAuctions(event)
             CharDBExecute("ALTER TABLE auctionhouse ADD COLUMN AddedByEluna INT NOT NULL DEFAULT 0") -- Adds the column if it doesn't exist
         elseif event == 14 then
             CharDBExecute("UPDATE auctionhouse SET AddedByEluna = 0 WHERE AddedByEluna > 0") -- Ensures all entries tracked by the core are reset on event 14
+        end
+    end)
+    CharDBQueryAsync("SHOW COLUMNS FROM item_instance LIKE 'AddedByEluna'", function(result) -- Checks if tracker exists directly from table structure
+        if not result then -- Check if any row is returned, indicating the column exists. FetchRow attempts to get the first row, if it fails (returns nil), then no column exists.
+            CharDBExecute("ALTER TABLE item_instance ADD COLUMN AddedByEluna INT NOT NULL DEFAULT 0") -- Adds the column if it doesn't exist
+        elseif event == 14 then
+            CharDBExecute("UPDATE item_instance SET AddedByEluna = 0 WHERE AddedByEluna > 0") -- Ensures all entries tracked by the core are reset on event 14
         end
     end)
 end
@@ -1411,9 +1418,66 @@ local function AddAuctions(specificHouse)
 			local selectedItems = SelectRandomItems()
 			if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Item selection complete.") end
 	
-			CharDBQueryAsync("SELECT MAX(guid) FROM item_instance", function(itemResult)
-				local lastItemId = itemResult:GetUInt32(0)
-				if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found start item GUID for next batch of instantiations: ".. lastItemId) end
+			CharDBQueryAsync("SELECT guid, AddedByEluna FROM item_instance ORDER BY AddedByEluna DESC", function(itemResult)
+				local availableGuids = {}
+				local maxGuid = 0
+				local usedGuids = {}
+				
+				-- Get highest and second highest AddedByEluna and build used GUIDs set
+				local highestAddedByEluna = 0
+				local secondHighestAddedByEluna = 0
+				local maxGuidForSecondHighest = 0
+				
+				repeat
+					local guid = itemResult:GetUInt32(0)
+					local AddedByEluna = itemResult:GetUInt32(1)
+					
+					usedGuids[guid] = true
+					maxGuid = math.max(maxGuid, guid)
+					
+					if AddedByEluna > highestAddedByEluna then
+						secondHighestAddedByEluna = highestAddedByEluna
+						highestAddedByEluna = AddedByEluna
+					elseif AddedByEluna > secondHighestAddedByEluna and AddedByEluna < highestAddedByEluna then
+						secondHighestAddedByEluna = AddedByEluna
+					end
+					
+					if AddedByEluna == secondHighestAddedByEluna then
+						maxGuidForSecondHighest = math.max(maxGuidForSecondHighest, guid)
+					end
+				until not itemResult:NextRow()
+				
+				-- If only one AddedByEluna found, use maxGuid as the upper bound
+				local upperBound = secondHighestAddedByEluna > 0 and maxGuidForSecondHighest or maxGuid
+				
+				-- Find available GUIDs below the upper bound
+				for i = 1, upperBound do
+					if not usedGuids[i] then
+						table.insert(availableGuids, i)
+						if #availableGuids >= ActionsPerCycle then
+							break
+						end
+					end
+				end
+				
+				-- If we need more GUIDs, check the AddedByEluna status of maxGuid
+				if #availableGuids < ActionsPerCycle then
+					local nextGuid
+					-- If maxGuid was added by Eluna (AddedByEluna = 1), just continue from there
+					if usedGuids[maxGuid] and highestAddedByEluna > 0 then
+						nextGuid = maxGuid + 1
+					else
+						-- If not added by Eluna, start at maxGuid + 10mln
+						nextGuid = maxGuid + 10000000
+					end
+					
+					while #availableGuids < ActionsPerCycle do
+						table.insert(availableGuids, nextGuid)
+						nextGuid = nextGuid + 1
+					end
+				end
+				
+				if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found " .. #availableGuids .. " available GUIDs for next batch") end
 				
 				CharDBQueryAsync("SELECT id, AddedByEluna FROM auctionhouse ORDER BY AddedByEluna DESC", function(result)
 					local availableIds = {}
@@ -1497,7 +1561,8 @@ local function AddAuctions(specificHouse)
 							if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Removing item " .. item.name .. " from queue due to belonging to another faction than auction house ID "..houseId) end
 						else
 							auctionCount = auctionCount + 1
-							lastItemId = lastItemId + 1
+							lastItemId = availableGuids[1]
+							table.remove(availableGuids, 1)
 							lastAuctionId = availableIds[1]
 							table.remove(availableIds, 1)
 							
