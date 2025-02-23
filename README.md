@@ -1,5 +1,5 @@
 
-<h1>PROJECT IS WIP, DO NOT USE</h1>
+<h1>Eluna AH Bot - Project is WIP but functional</h1>
 <p>Welcome to mostlynick's <strong>Eluna AH Bot</strong> module! This script is designed for automated auction house operations in the Yggdrasil WotLK and AzerothCore emulation environments. It supports both buyer and seller functionalities, and is designed to be plug-and-play with extensive configuration options.</p>
 <img src="https://raw.githubusercontent.com/mostlynick3/azerothcore-lua-ah-bot/master/icon.png" alt="Settings Image">
 
