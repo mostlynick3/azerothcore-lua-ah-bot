@@ -5,7 +5,7 @@
 --
 -- Features: * Plug and Play *, * Extensive filters *, * Buyer *, * Seller *, * Both bids and buyouts *, * and more *
 -- This module is compatible with all Eluna versions that support async DB queries.
--- Made for Yggdrasil WotLK / AzerothCore. 
+-- Made for AzerothCore. 
 -- You may freely use this file for emulation purposes. It is released under this repository's GPL v3 license: https://github.com/mostlynick3/azerothcore-lua-ah-bot
 --
 -------------------------------------------------------------------------------------------------------------------------
@@ -13,14 +13,14 @@
 -------------------------------------------------------------------------------------------------------------------------
 
 local EnableAHBot			= true			-- Default: True. If false, AH bot is disabled. 
-local AHBots				= {1391}		-- Default: 1, 2, 3, 4, 5. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
-local EnabledAuctionHouses	= {7}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
+local AHBots				= {1, 2, 3}		-- Default: 1, 2, 3. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
+local EnabledAuctionHouses	= {2, 6}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
 local AHBotActionDebug		= true			-- Default: False. Enables various action debug prints. Critical prints will still be active even if false.
 local AHBotItemDebug		= false			-- Default: False. Enables debug prints on item handling, cost per item entry, Quality, etc.
 local ActionsPerCycle		= 500			-- Default: 500 (items). The higher the value, the faster the bots fill the AH up to the min auctions limit and the more items they buy, at the expense of performance.
 local StartupDelay 			= 1000			-- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
 local EnableGMMessages		= true			-- Default: True. Messages all online GMs on command and initiation events.
-local AnnounceOnLogin		= false			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
+local AnnounceOnLogin		= true			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Buyer Configs
@@ -48,7 +48,6 @@ local RepopulationChance	= 30			-- Default: 30. Percentage chance to partially r
 local CostFormula 			= 1 	    	-- Default: 1. 1 = Quality based scaling, 2 = Entry ID influenced, 3 = Quality/Level focused, 4 = Balanced multi-factor, 5 = Progressive thresholds, 6 = Random (1000-1000000)
 local SellPriceVariance		= 20			-- Default: 20. How many % to randomize prices with. 
 local AHSellTimer 			= 5 			-- Default: 5 (hours). How often the AH bot will check whether it needs to put up new auctions, in hours.
-local SellOnStartup			= true			-- Default: True. Used for debugging and instantly populating an empty auction house. If true, fires AH bot on Eluna load (startup / Eluna reloads). If false, activates on AHSellTimer. 
 local ApplyRandomProperties = true			-- Default: True. Adds enchant/random stats and corresponding name to items (e.g., "of the Eagle"). This is DBC-based with Lua tables copied into this script. Disable if non-WotLK core.
 local SetAsCraftedBy		= true			-- Default: True. Marks items created by player spells as created by the AH bot posting the item.
 
@@ -149,6 +148,7 @@ local NeverSellIDs			= {									-- Default: Various items not intended for AH s
 -------------------------------------------------------------------------------------------------------------------------
 
 if not EnableAHBot then return end
+if not EnabledAuctionHouses then error("[Eluna AH Bot]: Core - No valid auction houses found!") end
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Helper functions, tables, etc.
@@ -1192,7 +1192,6 @@ local function AHBot_BuyAuction()
 				bidtime = results:GetUInt32(8)
 			})
 		until not results:NextRow() or #tempResults >= ActionsPerCycle
-		BuyOnStartup = false
 		
 		-- Then process the temporary table to remove entries we don't want to place bids/buyouts on
 		if DisableBidFight then
@@ -1260,7 +1259,17 @@ local function AHBot_BuyAuction()
             end
 
             if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #underpricedItems .. " underpriced items to roll buyout/bid on.") end
+			
+			if #underpricedItems == 0 then
+				if BuyOnStartup and SellOnStartup then
+					BuyOnStartup = false
+					SendMessageToGMs("No eligible items to buy. Loading in new auctions...") RunCommand("reload auctions")
+				end
+				return
+			end
 
+			BuyOnStartup = false
+			
             local transactions = {}
             for _, item in ipairs(underpricedItems) do
                 if AHBotItemDebug then print("[Eluna AH Bot Debug]: Processing transaction chances for item " .. item.entry) end
@@ -1370,6 +1379,8 @@ local function AddAuctions(specificHouse)
 	if currentHouse == 15 or currentHouse == 13 or currentHouse == 9 or currentHouse == 7 then houseId = 7
 	elseif currentHouse == 8 or currentHouse == 6 then houseId = 6
 	elseif currentHouse == 2 then houseId = 2 end
+	
+	if houseId == 0 then return end
 	
 	if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Processing auctions for house ID: " .. houseId) end
 	
@@ -1624,7 +1635,6 @@ local function AddAuctions(specificHouse)
 end
 
 local function AHBot_SellItems(specificHouse)
-    if not EnabledAuctionHouses then EnabledAuctionHouses = {2, 6, 7} end
 	if not specificHouse then
 		for _, houseId in ipairs(EnabledAuctionHouses) do
 			currentHouse = currentHouse + houseId
@@ -1836,24 +1846,39 @@ local function AHBot_Cmd(event, player, command)
 		return false
 		
 	elseif command:lower() == "ahbot auctions add" or command == "ahbot auctions add all" or command == "ahbot auction add all" or command == "auctions add all" or command == "auction add all" then
-		AHBot_SellItems(15)
-		SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to all auction houses.")
-		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on all auction houses.")
+		local overrideHouse = 0
+		for _, houseId in ipairs(EnabledAuctionHouses) do
+			overrideHouse = overrideHouse + houseId
+		end
+		if overrideHouse > 1 then
+			AHBot_SellItems(overrideHouse)
+			SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house(s) ".. houseList)
+			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on all auction houses: ".. houseList)
+		else
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. No auction houses enabled in AH bot config.")
+		end
 		return false
-	elseif command:lower() == "ahbot auctions add 2" then
-		AHBot_SellItems(2)
-		SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house ID 2.")
-		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on auction house 2.")
-		return false
-	elseif command:lower() == "ahbot auctions add 6" then
-		AHBot_SellItems(6)
-		SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house ID 6.")
-		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on auction house 6.")
-		return false
-	elseif command:lower() == "ahbot auctions add 7" then
-		AHBot_SellItems(7)
-		SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house ID 7.")
-		print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." force added auctions on auction house 7.")
+	elseif command:lower():find("ahbot auctions add (%d+)") then
+		local _, _, houseId = command:lower():find("ahbot auctions add (%d+)")
+		if houseId then
+			houseId = tonumber(houseId)
+			if houseId == 2 or houseId == 6 or houseId == 7 then
+				local houseEnabled = false
+				for _, enabledId in ipairs(EnabledAuctionHouses) do
+					if enabledId == houseId then
+						houseEnabled = true
+						AHBot_SellItems(houseId)
+						SendMessageToGMs("GM "..player:GetName().." has force added " .. ActionsPerCycle .. " auctions to auction house ID "..houseId..".")
+						print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on auction house "..houseId..".")
+						break
+					end
+				end
+				if not houseEnabled then
+					player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Auction house not found or disabled in AH bot config.")
+				end
+				return false
+			end
+		end
 		return false
 		
 	elseif command:lower() == "ahbot stop" then
