@@ -99,7 +99,7 @@ local AllowConjured			= false								-- Default: False. Toggles conjured items l
 
 -- Seller Item Weights
 -- The weight is always relative to the total set and number of items in the category.
--- The way it works is that it feeds all the items of the class X times into the weight tables,
+-- The way it works is that it feeds all the items of the class/ID X times into the weight tables,
 -- increasing the bool we can pick items from with duplicates of higher weighted categories.
 -- Increasing one value will supplant the value of the other values.
 local ItemWeights = {
@@ -126,19 +126,25 @@ local ItemWeights = {
     Glyph = 10,
     Projectile = 5,
     Other = 20,
+    SpecificItems = {
+		-- Example items to include that the auction house bots will weigh as separate categories.
+		-- Adding weights per item ID here can, for example, ensure that they are always sold by the AH in a desired (relative) quantity.
+		-- Example below: Frostweave Bag
+		-- [41599] = 2, -- Frostweave Bag
+		-- Add more items with the following structure:
+		-- [Item ID] = Weight,
+	},
 }
 
--- Customizable item ID filters
-local AlwaysSellIDs			= {}								-- Default: Nil. Not implemented.
-
+-- Customizable item ID exclusion filters
 local NeverSellIDs			= {									-- Default: Various items not intended for AH sale. Append list by adding new "<item_entry>," rows. 
-							   52252, -- Lightbringer Tabard	-- The SQL name list below works as well, though this is better to use in case of overlapping item names,
-							   44663, -- Adventurer's Satchel   -- or when you have the item ID readily available
+							   52252, -- Lightbringer Tabard	-- Additions here append to the SQL "NAME NOT" list. 
+							   44663, -- Adventurer's Satchel
 							   54822, -- Sen'Jin's Overcloak
 							   37201, -- Corpse Dust
 							   17195, -- Fake Mistletoe
 							   44432, -- China Glyph of Raise Dead??
-							   -- Deprecated Classic mounts below
+							   -- Deprecated Classic mounts
 							   1041, 1133, 1134, 2413, 2415, 5663, 5874, 5875, 
 							   8583, 8589, 8590, 8627, 8628, 8630, 8633, 14062,
 							   -- Add more item IDs if needed
@@ -185,6 +191,7 @@ RegisterServerEvent(14, TagElunaAuctions)
 
 local itemCache = {}										-- Stores all entries from the item_template for further processing
 local NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60-- Used in print and cmd feedback
+local NextAHBotBuyCycle	= os.time() + AHBuyTimer * 60 * 60 	-- Used in print and cmd feedback 
 local AHBotSellEventId										-- Used to track if running, for cmd etc
 local AHBotBuyEventId										-- Used to track if the indefinite Lua event for the AH bot is running, to not schedule another on top through the cmd system
 local botList = table.concat(AHBots, ",") 					-- Converts table to a string for SQL and concat interaction
@@ -927,6 +934,7 @@ if EnableItemFilters then
 		table.insert(conditions, "NAME NOT LIKE '%walnut stock%'")
 		table.insert(conditions, "NAME NOT LIKE '%virtuoso inking%'")
 		table.insert(conditions, "NAME NOT LIKE '%dictionary%'")
+		table.insert(conditions, "NAME NOT LIKE '%moonlit katana%'")
 		table.insert(conditions, "NAME NOT LIKE '%Omar%'")
 		table.insert(conditions, "NAME NOT LIKE '%depleted%'")
 		table.insert(conditions, "NAME NOT LIKE '%bottomless inscription bag%'")
@@ -942,6 +950,7 @@ if EnableItemFilters then
 		table.insert(conditions, "NAME NOT LIKE '%signet of beckoning%'")
 		table.insert(conditions, "NAME NOT LIKE '%silithid carapace%'")
 		table.insert(conditions, "NAME NOT LIKE '%smoke beacon%'")
+		table.insert(conditions, "NAME NOT LIKE '%shadoweave belt%'")
 		table.insert(conditions, "NAME NOT LIKE '%snickerfang jowl%'")
 		table.insert(conditions, "NAME NOT LIKE '%mojo%'")
 		table.insert(conditions, "NAME NOT LIKE '%singed%'")
@@ -1013,45 +1022,49 @@ local function getQualityString(Quality)
 end
 
 local function SelectRandomItems()
-    -- First, group items by their category and Quality
     local groupedItems = {
         Gear = {},
         Mats = {},
         Glyph = {},
         Projectile = {},
-        Other = {}
+        Other = {},
+        SpecificItems = {}
     }
     
-	-- Populate the groups
-	for _, item in pairs(itemCache) do
-		if item.class == 2 or item.class == 4 then
-			local Quality = item.Quality
-			groupedItems.Gear[Quality] = groupedItems.Gear[Quality] or {}
-			local weight = ItemWeights.Gear[getQualityString(Quality)]
-			for i = 1, weight do
-				table.insert(groupedItems.Gear[Quality], item)
-			end
-		elseif item.class == 7 then
-			local Quality = item.Quality
-			groupedItems.Mats[Quality] = groupedItems.Mats[Quality] or {}
-			local weight = ItemWeights.Mats[getQualityString(Quality)]
-			for i = 1, weight do
-				table.insert(groupedItems.Mats[Quality], item)
-			end
-		elseif item.class == 6 then
-			for i = 1, ItemWeights.Projectile do
-				table.insert(groupedItems.Projectile, item)
-			end
-		elseif item.class == 16 then
-			for i = 1, ItemWeights.Glyph do
-				table.insert(groupedItems.Glyph, item)
-			end
-		else
-			for i = 1, ItemWeights.Other do
-				table.insert(groupedItems.Other, item)
-			end
-		end
-	end
+    for _, item in pairs(itemCache) do
+        if ItemWeights.SpecificItems[item.entry] then
+            local weight = ItemWeights.SpecificItems[item.entry]
+            for i = 1, weight do
+                table.insert(groupedItems.SpecificItems, item)
+            end
+        elseif item.class == 2 or item.class == 4 then
+            local Quality = item.Quality
+            groupedItems.Gear[Quality] = groupedItems.Gear[Quality] or {}
+            local weight = ItemWeights.Gear[getQualityString(Quality)]
+            for i = 1, weight do
+                table.insert(groupedItems.Gear[Quality], item)
+            end
+        elseif item.class == 7 then
+            local Quality = item.Quality
+            groupedItems.Mats[Quality] = groupedItems.Mats[Quality] or {}
+            local weight = ItemWeights.Mats[getQualityString(Quality)]
+            for i = 1, weight do
+                table.insert(groupedItems.Mats[Quality], item)
+            end
+        elseif item.class == 6 then
+            for i = 1, ItemWeights.Projectile do
+                table.insert(groupedItems.Projectile, item)
+            end
+        elseif item.class == 16 then
+            for i = 1, ItemWeights.Glyph do
+                table.insert(groupedItems.Glyph, item)
+            end
+        else
+            for i = 1, ItemWeights.Other do
+                table.insert(groupedItems.Other, item)
+            end
+        end
+    end
     
     local selectedItems = {}
     for i = 1, ActionsPerCycle do
@@ -1098,7 +1111,7 @@ local function SelectRandomItems()
                 cumWeight = totalWeight
             })
         end
-		
+        
         -- Add weight for Projectiles if any remain
         if #groupedItems.Projectile > 0 then
             totalWeight = totalWeight + ItemWeights.Projectile
@@ -1115,6 +1128,18 @@ local function SelectRandomItems()
             table.insert(weightMap, {
                 weight = ItemWeights.Other,
                 items = groupedItems.Other,
+                cumWeight = totalWeight
+            })
+        end
+        
+        -- Add combined weight for SpecificItems items if any remain
+        if #groupedItems.SpecificItems > 0 then
+            -- Use the total items count as the effective weight
+            local SpecificItemsWeight = #groupedItems.SpecificItems
+            totalWeight = totalWeight + SpecificItemsWeight
+            table.insert(weightMap, {
+                weight = SpecificItemsWeight,
+                items = groupedItems.SpecificItems,
                 cumWeight = totalWeight
             })
         end
@@ -1384,7 +1409,7 @@ local function AHBot_BuyAuction()
 				query = query .. "WHERE id IN(" .. table.concat(ids, ",") .. ")"
 
 				CharDBQueryAsync(query, function()
-					SendMessageToGMs("Reloading auctions cache to pick up new bot transactions...")
+					SendMessageToGMs("Refreshing auctions cache to pick up new bot transactions...")
 					RunCommand("reload auctions")
 					if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Finished placing " .. #transactions .. " buyouts/bids.") end
 				end)
@@ -1641,13 +1666,25 @@ local function AddAuctions(specificHouse)
 							if randomStats > 0 then -- Handle random properties
 								local properties = ItemRandomProperty[randomStats]
 								if properties then
-									for _, property in ipairs(properties) do
+									local selectedProperty = nil
+									
+									for _, property in ipairs(properties) do -- First attempt to get a property based on chance
 										if math.random(0, 100) <= property.chance then
-											local e1, e2, e3 = table.unpack(ItemRandomProperties[property.ench])
-											enchantString = "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "..e1.." 0 0 "..e2.." 0 0 "..e3.." 0 0 0 0 0 0 0 0 "
-											randomStats = property.ench
-											if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Item "..item.entry.." - Enchants found for "..property.ench..": "..e1..", "..e2..", "..e3) end
+											selectedProperty = property
 											break
+										end
+									end
+									
+									if not selectedProperty and #properties > 0 then -- If no property was selected by chance, use the first one
+										selectedProperty = properties[1]
+									end
+									
+									if selectedProperty then -- Apply the selected property
+										local e1, e2, e3 = table.unpack(ItemRandomProperties[selectedProperty.ench])
+										enchantString = "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "..e1.." 0 0 "..e2.." 0 0 "..e3.." 0 0 0 0 0 0 0 0 "
+										randomStats = selectedProperty.ench
+										if AHBotItemDebug then 
+											print("[Eluna AH Bot Item Debug]: Item "..item.entry.." - Enchants for "..selectedProperty.ench..": "..e1..", "..e2..", "..e3) 
 										end
 									end
 								end
@@ -1668,14 +1705,14 @@ local function AddAuctions(specificHouse)
 									item.subclass == 2 or item.subclass == 3 or item.subclass == 6 or
 									item.subclass == 13 or item.subclass == 15 or item.subclass == 16 or 
 									item.subclass == 17 or item.subclass == 18)) then -- Stamina, Agility. To-do: Boomie leather gear.
-									suffixOptions = {50, 56, 63, 68, 69, 71, 74, 82, 84, 89, 91, 31, 32, 33, 34, 35}
+									suffixOptions = {56, 63, 68, 69, 71, 74, 84, 89, 91, 31, 32, 33, 34, 35}
 									
 								elseif (item.class == 4 and item.subclass == 3) then -- Mail gear, hunter/shaman
 									suffixOptions = {91, 89, 86, 71, 69, 63, 67, 50, 31, 32, 33, 34, 35}
 									
 								elseif item.class == 2 or (item.class == 4 and -- Plate gear, remaining weapons
 									(item.subclass == 4 or item.subclass == 6)) then -- Plate armor and shields
-									suffixOptions = {92, 89, 86, 84, 68, 71, 72, 66, 62, 63, 43, 42, 41, 31, 32, 33, 34, 35}
+									suffixOptions = {92, 89, 86, 84, 68, 71, 72, 66, 62, 63, 43, 41, 31, 32, 33, 34, 35}
 								else -- Random stats failsafe
 									suffixOption = math.random(49, 75)
 								end
@@ -1726,7 +1763,7 @@ local function AddAuctions(specificHouse)
 										return
 									end
 									if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") end
-									SendMessageToGMs("Reloading auctions cache to pick up new bot auctions...")
+									SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
 									RunCommand("reload auctions") -- Instantiates auctions
 									NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
 									return
@@ -1747,8 +1784,9 @@ local function AddAuctions(specificHouse)
 	end)
 end
 
-local function AHBot_SellItems(specificHouse)
+local function AHBot_SellItems(_, _, _, specificHouse)
 	if not specificHouse then
+		currentHouse = 0
 		for _, houseId in ipairs(EnabledAuctionHouses) do
 			currentHouse = currentHouse + houseId
 		end
@@ -1873,6 +1911,35 @@ end
 -- Management commands
 ---------------------------------------------------------------------------------
 
+local blockCommands = os.time() + 15 -- Prevents expiring auctions while initially starting AH bot
+
+local function CheckExpiry(houseId)
+	blockCommands = os.time() + 300 -- Block expirations for 5 minutes. If the core hasn't expired auctions by now, something is wrong
+    CreateLuaEvent(function(eventId)
+		if blockCommands < os.time() then
+			print("[Eluna AH Bot]: Error expiring auctions " .. (houseId and " in house ID " .. houseId or "") .. ".")
+			SendMessageToGMs("Error expiring auctions" .. (houseId and " in house ID " .. houseId or "") .. "!")
+			RemoveEventById(eventId)
+			blockCommands = 0
+		end
+		
+        local query = "SELECT 1 FROM auctionhouse WHERE itemowner IN (" .. botList .. ")"
+        
+        if houseId then
+            query = query .. " AND houseid = " .. houseId
+        end
+        
+        CharDBQueryAsync(query, function(result)
+            if not result then
+                print("[Eluna AH Bot]: All bot auctions" .. (houseId and " in house ID " .. houseId or "") .. " have expired.")
+                SendMessageToGMs("All bot auctions" .. (houseId and " in house ID " .. houseId or "") .. " have been expired.")
+                RemoveEventById(eventId)
+				blockCommands = 0
+            end
+        end)
+    end, 5000, 0)
+end
+
 local function AHBot_Cmd(event, player, command)
 	if not player then return end
 	if command:find("ah") then
@@ -1881,6 +1948,14 @@ local function AHBot_Cmd(event, player, command)
 			return false
 		end
 	end
+	
+	if blockCommands > os.time() then
+		if command:find("ahbot auctions expire") or command:find("ahbot auctions add") or command:find("ahbot auctions buy") or command:find("ahbot start") then
+			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: This command cannot be used while auctions are being refreshed.")
+			return false
+		end
+	end
+	
 	local name = player:GetName()
 	if command:lower() == "ahbot" or command == "ahbot options" or command == "ahbot help" then
 		player:SendBroadcastMessage(" ")
@@ -1911,7 +1986,7 @@ local function AHBot_Cmd(event, player, command)
 		player:SendBroadcastMessage("|- Number of possible items in auction house pool: ".. ItemTemplateSize)
 		player:SendBroadcastMessage("|- Bot items on auction houses on last cycle: "..(table.concat(auctionInfo, ", ")))
 		player:SendBroadcastMessage("|- Next auction house bot sell cycle (hours:minutes): ".. os.date("%H:%M", NextAHBotSellCycle))
-		player:SendBroadcastMessage("|- Next auction house bot sell cycle: in " .. math.ceil((NextAHBotSellCycle - os.time()) / 60) .. " minutes")
+		player:SendBroadcastMessage("|- Next auction house bot buy cycle: in " .. math.ceil((NextAHBotBuyCycle - os.time()) / 60) .. " minutes")
 		local status
 		if AHBotSellEventId then status = "Online" else status = "Offline" end
 		player:SendBroadcastMessage("Status auction house bot seller service: "..status)
@@ -1919,40 +1994,44 @@ local function AHBot_Cmd(event, player, command)
 		player:SendBroadcastMessage("Status auction house bot buyer service: "..status)
 		return false
 		
-	elseif command:lower() == "ahbot auctions expire" or command == "ahbot expire" or command == "ahbot auctions expire all" or command == "auctions expire"  then
+	elseif command:lower() == "ahbot auctions expire" or command == "ahbot auctions expire all" then
 		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ")", function(query)
 			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set all bot auctions to expire on next auction update. Reloading auctions cache...")
+			SendMessageToGMs("GM "..name.." has set all bot auctions to expire on next auction update. Refreshing auctions cache...")
 			RunCommand("reload auctions")
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired all auction houses' bot auctions.")	
+			CheckExpiry()
 		end)
 		return false
 	elseif command:lower() == "ahbot auctions expire 2" then
 		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 2", function(query)
 			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 2 to expire on next auction update. Reloading auctions cache...")
+			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 2 to expire on next auction update. Refreshing auctions cache...")
 			RunCommand("reload auctions")
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 2.")	
+			CheckExpiry(2)
 		end)
 		return false
 	elseif command:lower() == "ahbot auctions expire 6" then
 		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 6", function(query)
 			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 6 to expire on next auction update. Reloading auctions cache...")
+			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 6 to expire on next auction update. Refreshing auctions cache...")
 			RunCommand("reload auctions")
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 6.")	
+			CheckExpiry(6)
 		end)
 		return false
 	elseif command:lower() == "ahbot auctions expire 7" then
 		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 7", function(query)
 			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 7 to expire on next auction update. Reloading auctions cache...")
+			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 7 to expire on next auction update. Refreshing auctions cache...")
 			RunCommand("reload auctions") -- Instantiates auctions
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 7.")	
+			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 7.")
+			CheckExpiry(7)
 		end)
 		return false
 	
-	elseif command:lower() == "ahbot auctions buy" or command == "ahbot buy" or command == "auctions buy" or command == "ahbot auction buy" or command == "auctions buy" then
+	elseif command:lower() == "ahbot auctions buy" then
 		AHBot_BuyAuction()
 		SendMessageToGMs("GM "..name.." is force buying " .. ActionsPerCycle .. " auctions from all auction houses.")
 		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force bought auctions on all auction houses.")
@@ -1964,7 +2043,7 @@ local function AHBot_Cmd(event, player, command)
 			overrideHouse = overrideHouse + houseId
 		end
 		if overrideHouse > 1 then
-			AHBot_SellItems(overrideHouse)
+			AHBot_SellItems(_, _, _, overrideHouse)
 			SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house(s) ".. houseList)
 			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on all auction houses: ".. houseList)
 		else
@@ -1980,7 +2059,7 @@ local function AHBot_Cmd(event, player, command)
 				for _, enabledId in ipairs(EnabledAuctionHouses) do
 					if enabledId == houseId then
 						houseEnabled = true
-						AHBot_SellItems(houseId)
+						AHBot_SellItems(_, _, _, houseId)
 						SendMessageToGMs("GM "..player:GetName().." has force added " .. ActionsPerCycle .. " auctions to auction house ID "..houseId..".")
 						print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on auction house "..houseId..".")
 						break
