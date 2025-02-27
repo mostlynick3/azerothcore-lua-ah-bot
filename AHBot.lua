@@ -1508,20 +1508,24 @@ local function AddAuctions(specificHouse)
 					local availableIds = {}
 					local maxId = 0
 					local usedIds = {}
-					
+				   
 					-- Get highest and second highest AddedByEluna and build used IDs set
 					local highestAddedByEluna = 0
 					local secondHighestAddedByEluna = 0
 					local maxIdForSecondHighest = 0
 					
-					repeat
+					-- Check if the result set is empty
+					local isEmpty = true
+				   
+					if result then repeat
+						isEmpty = false  -- If we enter the loop, table is not empty
 						local id = result:GetUInt32(0)
 						local AddedByEluna = result:GetUInt32(1)
-						
+					   
 						usedIds[id] = true
-						
+					   
 						maxId = math.max(maxId, id)
-						
+					   
 						if AddedByEluna > highestAddedByEluna then
 							secondHighestAddedByEluna = highestAddedByEluna
 							highestAddedByEluna = AddedByEluna
@@ -1532,29 +1536,39 @@ local function AddAuctions(specificHouse)
 						if AddedByEluna == secondHighestAddedByEluna then
 							maxIdForSecondHighest = math.max(maxIdForSecondHighest, id)
 						end
-					until not result:NextRow()
+						
+					until not result:NextRow() end
 					
-					-- If only one AddedByEluna found, use maxId as the upper bound
-					local upperBound = secondHighestAddedByEluna > 0 and maxIdForSecondHighest or maxId
-					
-					-- Find available IDs below the upper bound
-					for i = 1, upperBound do
-						if not usedIds[i] then
-							table.insert(availableIds, i)
-							if #availableIds >= ActionsPerCycle then
-								break
-							end
-						end
-					end
-					
-					-- If we need more IDs, add them above maxId in 10mln increments
-					if #availableIds < ActionsPerCycle then
-						local nextId = maxId + 10000000
+					-- If table is empty, start from 10,000,000
+					if isEmpty then
+						local nextId = 10000000
 						while #availableIds < ActionsPerCycle do
 							table.insert(availableIds, nextId)
 							nextId = nextId + 1
 						end
-					end
+					else
+						-- If only one AddedByEluna found, use maxId as the upper bound
+						local upperBound = secondHighestAddedByEluna > 0 and maxIdForSecondHighest or maxId
+					   
+						-- Find available IDs below the upper bound
+						for i = 1, upperBound do
+							if not usedIds[i] then
+								table.insert(availableIds, i)
+								if #availableIds >= ActionsPerCycle then
+									break
+								end
+							end
+						end
+					   
+						-- If we need more IDs, add them above maxId in increments
+						if #availableIds < ActionsPerCycle then
+							local nextId = maxId + 10000000
+							while #availableIds < ActionsPerCycle do
+								table.insert(availableIds, nextId)
+								nextId = nextId + 1
+							end
+						end
+				    end
 					
 					local itemQueryParts = {}
 					local auctionQueryParts = {}
@@ -1563,7 +1577,6 @@ local function AddAuctions(specificHouse)
 					for _, item in ipairs(selectedItems) do
 						if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Processing item "..item.name) end
 						local isAllowed = false
-
 						if houseId == 7 or item.race == 2147483647 or item.race == -1 then 
 							isAllowed = true
 						elseif houseId == 2 then -- Alliance AH, check if horde race is present in item_template
