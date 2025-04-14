@@ -13,14 +13,14 @@
 -------------------------------------------------------------------------------------------------------------------------
 
 local EnableAHBot			= true			-- Default: True. If false, AH bot is disabled. 
-local AHBots				= {1391}		-- Default: 1, 2, 3, 4, 5. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
-local EnabledAuctionHouses	= {7}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
+local AHBots				= {1, 2, 3}		-- Default: 1, 2, 3. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
+local EnabledAuctionHouses	= {2, 6, 7}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
 local AHBotActionDebug		= true			-- Default: False. Enables various action debug prints. Critical prints will still be active even if false.
 local AHBotItemDebug		= false			-- Default: False. Enables debug prints on item handling, cost per item entry, Quality, etc.
 local ActionsPerCycle		= 500			-- Default: 500 (items). The higher the value, the faster the bots fill the AH up to the min auctions limit and the more items they buy, at the expense of performance.
 local StartupDelay 			= 1000			-- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
 local EnableGMMessages		= true			-- Default: True. Messages all online GMs on command and initiation events.
-local AnnounceOnLogin		= false			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
+local AnnounceOnLogin		= true			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Buyer Configs
@@ -171,14 +171,14 @@ local AddedByEluna = 1 -- 0 means created by the core, 1 means created by Eluna
 
 local function TagElunaAuctions(event)
     CharDBQueryAsync("SHOW COLUMNS FROM auctionhouse LIKE 'AddedByEluna'", function(result) -- Checks if tracker exists directly from table structure
-        if not result then -- Check if any row is returned, indicating the column exists. FetchRow attempts to get the first row, if it fails (returns nil), then no column exists.
+        if not result and not (event == 14) then -- Check if any row is returned, indicating the column exists. FetchRow attempts to get the first row, if it fails (returns nil), then no column exists.
             CharDBExecute("ALTER TABLE auctionhouse ADD COLUMN AddedByEluna INT NOT NULL DEFAULT 0") -- Adds the column if it doesn't exist
         elseif event == 14 then
             CharDBExecute("UPDATE auctionhouse SET AddedByEluna = 0 WHERE AddedByEluna > 0") -- Ensures all entries tracked by the core are reset on event 14
         end
     end)
     CharDBQueryAsync("SHOW COLUMNS FROM item_instance LIKE 'AddedByEluna'", function(result) -- Checks if tracker exists directly from table structure
-        if not result then -- Check if any row is returned, indicating the column exists. FetchRow attempts to get the first row, if it fails (returns nil), then no column exists.
+        if not result and not (event == 14) then -- Check if any row is returned, indicating the column exists. FetchRow attempts to get the first row, if it fails (returns nil), then no column exists.
             CharDBExecute("ALTER TABLE item_instance ADD COLUMN AddedByEluna INT NOT NULL DEFAULT 0") -- Adds the column if it doesn't exist
         elseif event == 14 then
             CharDBExecute("UPDATE item_instance SET AddedByEluna = 0 WHERE AddedByEluna > 0") -- Ensures all entries tracked by the core are reset on event 14
@@ -1450,7 +1450,7 @@ local function AddAuctions(specificHouse)
 				
 				-- Get highest and second highest AddedByEluna and build used GUIDs set
 				local highestAddedByEluna = 0
-				local secondHighestAddedByEluna = 0
+				local NotAddedByEluna = 0
 				local maxGuidForSecondHighest = 0
 				
 				repeat
@@ -1461,19 +1461,19 @@ local function AddAuctions(specificHouse)
 					maxGuid = math.max(maxGuid, guid)
 					
 					if AddedByEluna > highestAddedByEluna then
-						secondHighestAddedByEluna = highestAddedByEluna
+						NotAddedByEluna = highestAddedByEluna
 						highestAddedByEluna = AddedByEluna
-					elseif AddedByEluna > secondHighestAddedByEluna and AddedByEluna < highestAddedByEluna then
-						secondHighestAddedByEluna = AddedByEluna
+					elseif AddedByEluna > NotAddedByEluna and AddedByEluna < highestAddedByEluna then
+						NotAddedByEluna = AddedByEluna
 					end
 					
-					if AddedByEluna == secondHighestAddedByEluna then
+					if AddedByEluna == NotAddedByEluna then
 						maxGuidForSecondHighest = math.max(maxGuidForSecondHighest, guid)
 					end
 				until not itemResult:NextRow()
 				
 				-- If only one AddedByEluna found, use maxGuid as the upper bound
-				local upperBound = secondHighestAddedByEluna > 0 and maxGuidForSecondHighest or maxGuid
+				local upperBound = NotAddedByEluna > 0 and maxGuidForSecondHighest or maxGuid
 				
 				-- Find available GUIDs below the upper bound
 				for i = 1, upperBound do
@@ -1502,19 +1502,14 @@ local function AddAuctions(specificHouse)
 					end
 				end
 				
-				if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found " .. #availableGuids .. " available GUIDs for next batch") end
+				if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found " .. #availableGuids .. " available item GUIDs for next batch") end
 				
 				CharDBQueryAsync("SELECT id, AddedByEluna FROM auctionhouse ORDER BY AddedByEluna DESC", function(result)
 					local availableIds = {}
 					local maxId = 0
 					local usedIds = {}
-				   
-					-- Get highest and second highest AddedByEluna and build used IDs set
-					local highestAddedByEluna = 0
-					local secondHighestAddedByEluna = 0
-					local maxIdForSecondHighest = 0
-					
-					-- Check if the result set is empty
+					local MaxIdNotAddedByEluna = 0
+					local NotAddedByEluna
 					local isEmpty = true
 				   
 					if result then repeat
@@ -1526,49 +1521,50 @@ local function AddAuctions(specificHouse)
 					   
 						maxId = math.max(maxId, id)
 					   
-						if AddedByEluna > highestAddedByEluna then
-							secondHighestAddedByEluna = highestAddedByEluna
-							highestAddedByEluna = AddedByEluna
-						elseif AddedByEluna > secondHighestAddedByEluna and AddedByEluna < highestAddedByEluna then
-							secondHighestAddedByEluna = AddedByEluna
-						end
-						
-						if AddedByEluna == secondHighestAddedByEluna then
-							maxIdForSecondHighest = math.max(maxIdForSecondHighest, id)
+						if AddedByEluna == 0 then
+							MaxIdNotAddedByEluna = math.max(MaxIdNotAddedByEluna, id)
+							NotAddedByEluna = true
 						end
 						
 					until not result:NextRow() end
 					
-					-- If table is empty, start from 10,000,000
-					if isEmpty then
+					if MaxIdNotAddedByEluna == 0 then MaxIdNotAddedByEluna = maxId end
+					
+					if isEmpty then -- If table is empty, start from 10 000 000
 						local nextId = 10000000
 						while #availableIds < ActionsPerCycle do
 							table.insert(availableIds, nextId)
 							nextId = nextId + 1
 						end
 					else
-						-- If only one AddedByEluna found, use maxId as the upper bound
-						local upperBound = secondHighestAddedByEluna > 0 and maxIdForSecondHighest or maxId
-					   
-						-- Find available IDs below the upper bound
-						for i = 1, upperBound do
-							if not usedIds[i] then
-								table.insert(availableIds, i)
-								if #availableIds >= ActionsPerCycle then
-									break
+						local upperBound = NotAddedByEluna and MaxIdNotAddedByEluna or maxId
+						
+						if NotAddedByEluna then -- If there are auctions not added by Eluna in current server session, fill in gaps
+							for i = 1, upperBound do
+								if not usedIds[i] then
+									table.insert(availableIds, i)
+									if #availableIds >= ActionsPerCycle then
+										break
+									end
 								end
 							end
-						end
-					   
-						-- If we need more IDs, add them above maxId in increments
-						if #availableIds < ActionsPerCycle then
-							local nextId = maxId + 10000000
+						else -- If there are only auctions added by Eluna in current server session, continue from highest auction ID
+							local nextId = maxId + 1
 							while #availableIds < ActionsPerCycle do
 								table.insert(availableIds, nextId)
 								nextId = nextId + 1
 							end
 						end
-				    end
+						
+						-- If we need more IDs, add them above maxId in increments
+						if #availableIds < ActionsPerCycle then
+							local nextId = math.max(MaxIdNotAddedByEluna + 10000000, maxId)
+							while #availableIds < ActionsPerCycle do
+								table.insert(availableIds, nextId)
+								nextId = nextId + 1
+							end
+						end
+					end
 					
 					local itemQueryParts = {}
 					local auctionQueryParts = {}
