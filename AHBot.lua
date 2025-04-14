@@ -1558,7 +1558,7 @@ local function AddAuctions(specificHouse)
 						
 						-- If we need more IDs, add them above maxId in increments
 						if #availableIds < ActionsPerCycle then
-							local nextId = math.max(MaxIdNotAddedByEluna + 10000000, maxId)
+							local nextId = math.max(MaxIdNotAddedByEluna + 10000000, maxId + 1)
 							while #availableIds < ActionsPerCycle do
 								table.insert(availableIds, nextId)
 								nextId = nextId + 1
