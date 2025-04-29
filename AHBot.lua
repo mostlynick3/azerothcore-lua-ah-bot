@@ -67,6 +67,7 @@ local AllowConsumables		= true								-- Default: True. Toggles selling consumab
 local MinContainerSize		= 16								-- Default: 16. Don't allow selling containers (including quivers, bags, etc.) under specified size.
 local MinLevelConsumables	= 50								-- Default: 50. Prevents the AH bot from flooding the market with low level junk.
 local MinLevelGear			= 10								-- Default: 10. Prevents the AH bot from flooding the market with low level junk and unobtainable starter items.
+local MaxLevel				= 80								-- Default: 80. The AH bot will not sell any item with a level limit exceeding this value.
 local StackedItemClasses	= {0, 5, 6, 7}						-- Default: 0, 5, 6, 7. Sells stacks between 50-100% of max stack size. Possible values: 0 (Consumable), 1 (Container), 2 (Weapon), 3 (Gem), 4 (Armor), 5 (Reagent), 6 (Projectile), 7 (Trade Goods), 9 (Recipe), 11 (Quiver), 12 (Quest), 13 (Key) 15 (Miscellaneous), 16 (Glyph).
 local AlwaysMaxStackAmmo	= true								-- Default: True. If true, always sells ammo in stacks of 1000.
 local AdjustedAmmoPrices 	= true								-- Default: True. Ammo price variables are inconsistent. This adjusts ammunition prices to realistic in-game prices. For example, Iceblade Arrows are set to between 20g-35g per stack.
@@ -965,6 +966,10 @@ if EnableItemFilters then
 		table.insert(conditions, "NOT (class = 11 and subclass = 1)")
 	end
 
+	if MaxLevel then
+		table.insert(conditions, "RequiredLevel <= ".. MaxLevel)
+	end
+	
 	if not AllowBindOnAccount then
 		table.insert(conditions, "(flags & 134217728) = 0")
 	end
