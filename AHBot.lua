@@ -1264,6 +1264,8 @@ local function AHBot_BuyAuction()
 		
         if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #auctionResults .. " potential auctions to process") end
 
+        if not (#auctionResults > 0) then return end -- Prevents null query in item_instance table
+
         local itemGuids = {}
         for _, auction in ipairs(auctionResults) do
             table.insert(itemGuids, auction.itemguid)
