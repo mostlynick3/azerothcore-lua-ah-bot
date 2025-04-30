@@ -217,6 +217,8 @@ function SendMessageToGMs(message)
 end
 
 local function queryBotCharacters() -- Verifies bots' existence
+    if not botList or botList == "" or botList:match("[^%d,]") then error("[Eluna AH Bot]: Core - Invalid auction house bots selection! Correct config value 'AHBots' to contain only digits and commas.") end
+    
     local result = CharDBQuery("SELECT guid FROM characters WHERE guid IN (" .. botList .. ")")
     if not result then CreateLuaEvent(SendMessageToGMs, 15 * 60 * 1000, 0) error("[Eluna AH Bot]: Core - No valid bots found!") end -- Notify GMs every 15 minutes if enabled with erroneous AH bot setup
 
