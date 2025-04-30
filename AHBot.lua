@@ -159,7 +159,6 @@ local NeverSellIDs			= {									-- Default: Various items not intended for AH s
 -------------------------------------------------------------------------------------------------------------------------
 
 if not EnableAHBot then return end
-if not EnabledAuctionHouses then error("[Eluna AH Bot]: Core - No valid auction houses found!") end
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Helper functions, tables, etc.
@@ -202,6 +201,12 @@ local botList = table.concat(AHBots, ",") 					-- Converts table to a string for
 local houseList = table.concat(EnabledAuctionHouses, ",")	-- Converts table to a string for SQL and concat interaction
 local postedAuctions = {} 									-- Counts how many auctions have been posted by the auction bots last. Used in info cmd
 
+-- Early returns and MySQL error failsafes
+if not EnabledAuctionHouses then error("[Eluna AH Bot]: Core - No valid auction houses found!") end
+if not botList or botList == "" or botList:match("[^%d,]") then error("[Eluna AH Bot]: Core - Invalid auction house bots selection! Correct config value 'AHBots' to contain only digits and commas.") end 
+if not houseList or houseList == "" or houseList:match("[^%d,]") then  print("[Eluna AH Bot]: Core - No valid house list given! Defaulting to 2, 6, 7 (ally, horde, and neutral).") houseList = "2,6,7" end
+if not ActionsPerCycle or type(ActionsPerCycle) ~= "number" then print("[Eluna AH Bot]: Core - ActionsPerCycle must be a number! Defaulting to 500.") ActionsPerCycle = 500 end
+
 function SendMessageToGMs(message)
     for _, player in pairs(GetPlayersInWorld()) do
         if player:GetGMRank() > 0 then
@@ -217,8 +222,6 @@ function SendMessageToGMs(message)
 end
 
 local function queryBotCharacters() -- Verifies bots' existence
-    if not botList or botList == "" or botList:match("[^%d,]") then error("[Eluna AH Bot]: Core - Invalid auction house bots selection! Correct config value 'AHBots' to contain only digits and commas.") end
-    
     local result = CharDBQuery("SELECT guid FROM characters WHERE guid IN (" .. botList .. ")")
     if not result then CreateLuaEvent(SendMessageToGMs, 15 * 60 * 1000, 0) error("[Eluna AH Bot]: Core - No valid bots found!") end -- Notify GMs every 15 minutes if enabled with erroneous AH bot setup
 
@@ -1768,7 +1771,7 @@ local function AddAuctions(specificHouse)
 						end
 					end
 					-- We're nesting our next operations in async queries to ensure they don't overlap and are performed in rapid succession
-					if #itemQueryParts > 0 then 
+					if #itemQueryParts > 0 and #auctionQueryParts > 0 then 
 					
 						local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
 						local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
