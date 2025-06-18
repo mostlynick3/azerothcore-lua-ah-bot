@@ -1638,7 +1638,7 @@ local function CheckAuctions(houseId, callback)
     function(countResult)
         local count
         if countResult then
-            count = countResult:GetUInt64(0)
+            count = tonumber(countResult:GetUInt64(0)) or 0
             postedAuctions[houseId] = count
         else
             count = 0
