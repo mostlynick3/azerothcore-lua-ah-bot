@@ -1635,13 +1635,16 @@ end
 
 local function CheckAuctions(houseId, callback)
     CharDBQueryAsync(string.format("SELECT COUNT(*) FROM auctionhouse WHERE itemowner IN (%s) and houseid = %d", botList, houseId),
-	function(countResult)
-		if countResult then
-			local count = countResult:GetUInt64(0)
-			postedAuctions[houseId] = count
-			callback(count)
-		end
-	end)
+    function(countResult)
+        local count
+        if countResult then
+            count = countResult:GetUInt64(0)
+            postedAuctions[houseId] = count
+        else
+            count = 0
+        end
+        callback(count)
+    end)
 end
 
 function bitAnd(a, b)
