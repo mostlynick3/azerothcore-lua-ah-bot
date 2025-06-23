@@ -1873,6 +1873,216 @@ end
 -- AH Bot Buyer Script
 ---------------------------------------------------------------------------------
 
+local function AHBot_Buy_ProcessItemResults(itemResults, auctionResults)
+    if not itemResults then return end
+    
+    local itemEntries = {}
+    repeat
+        local guid = itemResults:GetUInt32(0)
+        local itemEntry = itemResults:GetUInt32(1)
+        itemEntries[guid] = itemEntry
+    until not itemResults:NextRow()
+    
+    local underpricedItems = {}
+    for _, item in pairs(itemCache) do
+        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Evaluating item " .. item.entry .. " for price calculation") end
+        
+        local validItem = false
+        if ItemLevelLimit then
+            if item.ItemLevel < ItemLevelLimit then 
+                validItem = true 
+                if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Item " .. item.entry .. " meets level requirement of " .. ItemLevelLimit) end
+            end
+        end
+
+        if validItem then
+            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Calculating price for valid item " .. item.entry) end
+            local cost = ChooseCostFormula(CostFormula, item) * BotsPriceTolerance
+            if cost < 200000 then cost = math.random(50000, 250000) end
+            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Final adjusted cost for item " .. item.entry .. ": " .. cost) end
+
+            for _, auction in ipairs(auctionResults) do
+                if itemEntries[auction.itemguid] == item.entry and auction.buyoutprice < cost then
+                    if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Buyer - Found underpriced item " .. item.entry .. " at " .. auction.buyoutprice .. " vs calculated " .. cost) end
+                    table.insert(underpricedItems, {
+                        entry = item.entry,
+                        currentPrice = auction.buyoutprice,
+                        calculatedValue = cost,
+                        auctionId = auction.id
+                    })
+                end
+            end
+        end
+    end
+
+    if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #underpricedItems .. " underpriced items to roll buyout/bid on.") end
+    
+    if #underpricedItems == 0 then
+        if BuyOnStartup and SellOnStartup then
+            BuyOnStartup = false
+            SendMessageToGMs("No eligible items to buy. Loading in new auctions...")
+            RunCommand("reload auctions")
+        end
+        return
+    end
+
+    BuyOnStartup = false
+    AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
+end
+
+local function AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
+    local transactions = {}
+    
+    for _, item in ipairs(underpricedItems) do
+        if AHBotItemDebug then print("[Eluna AH Bot Debug]: Processing transaction chances for item " .. item.entry) end
+        
+        local buyoutRoll = math.random(1, 100)
+        local bidRoll = math.random(1, 100)
+        
+        -- Ensure rolls don't exceed 100% combined probability
+        if buyoutRoll + bidRoll > 100 then
+            bidRoll = 100 - buyoutRoll
+            if AHBotItemDebug then print("[Eluna AH Bot Debug]: Adjusted bid roll for item " .. item.entry .. " to " .. bidRoll) end
+        end
+
+        local matchingAuction
+        for _, auction in ipairs(auctionResults) do
+            if auction.id == item.auctionId then
+                matchingAuction = auction
+                break
+            end
+        end
+
+        if matchingAuction then
+            local transactionType = nil
+            if buyoutRoll <= PlaceBuyoutChance then
+                transactionType = "buyout"
+            elseif bidRoll <= PlaceBidChance then
+                transactionType = "bid"
+            end
+
+            if transactionType then
+                local price
+                
+                if transactionType == "buyout" then
+                    price = matchingAuction.buyoutprice
+                else  -- bid
+                    local minBid = math.max(matchingAuction.startbid * 1.10, matchingAuction.buyoutprice * 0.60)
+                    local maxBid = matchingAuction.buyoutprice * 0.95
+
+                    if minBid >= maxBid then  -- If no valid bid range exists, default to buyout
+                        transactionType = "buyout"
+                        price = matchingAuction.buyoutprice
+                    else
+                        price = math.random(minBid, maxBid)
+                    end
+                end
+                
+                table.insert(transactions, {
+                    transactionType = transactionType,
+                    entry = item.entry,
+                    itemGuid = matchingAuction.itemguid,
+                    auctionId = matchingAuction.id,
+                    itemOwner = matchingAuction.itemowner,
+                    price = price,
+                    houseid = matchingAuction.houseid
+                })
+            end
+        end
+    end
+    
+    if #transactions > 0 then
+        AHBot_Buy_ExecuteTransactions(transactions)
+    end
+end
+
+local function AHBot_Buy_ExecuteTransactions(transactions)
+    local ids = {}
+    local buyguidCases = {}
+    local lastbidCases = {}
+    local timeCases = {}
+
+    for _, transaction in ipairs(transactions) do
+        local randomBot = AHBots[math.random(1, #AHBots)]
+        table.insert(buyguidCases, "WHEN " .. transaction.auctionId .. " THEN " .. randomBot)
+        table.insert(lastbidCases, "WHEN " .. transaction.auctionId .. " THEN " .. transaction.price)
+        table.insert(ids, transaction.auctionId)
+
+        if transaction.transactionType == "buyout" then
+            table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN " .. os.time())
+        else
+            table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN time")
+        end
+    end
+
+    local query = "UPDATE auctionhouse SET " ..
+                  "buyguid = CASE id " .. table.concat(buyguidCases, " ") .. " END, " ..
+                  "lastbid = CASE id " .. table.concat(lastbidCases, " ") .. " END, " ..
+                  "time = CASE id " .. table.concat(timeCases, " ") .. " END " ..
+                  "WHERE id IN(" .. table.concat(ids, ",") .. ")"
+
+    CharDBQueryAsync(query, function()
+        SendMessageToGMs("Refreshing auctions cache to pick up new bot transactions...")
+        RunCommand("reload auctions")
+        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Finished placing " .. #transactions .. " buyouts/bids.") end
+    end)
+end
+
+local function AHBot_Buy_ProcessAuctionResults(results)
+    if not results then 
+        if BuyOnStartup and SellOnStartup then 
+            BuyOnStartup = false 
+            SendMessageToGMs("No eligible items to buy. Loading in new auctions...") 
+            RunCommand("reload auctions") 
+        end 
+        return 
+    end
+    
+    local tempResults = {}
+    
+    -- Store all results in temporary table
+    repeat
+        table.insert(tempResults, {
+            id = results:GetUInt32(0),
+            itemguid = results:GetUInt32(1),
+            houseid = results:GetUInt32(2),
+            itemowner = results:GetUInt32(3),
+            buyoutprice = results:GetUInt32(4),
+            buyguid = results:GetUInt32(5),
+            lastbid = results:GetUInt32(6),
+            startbid = results:GetUInt32(7),
+            bidtime = results:GetUInt32(8)
+        })
+    until not results:NextRow() or #tempResults >= ActionsPerCycle
+    
+    -- Filter out auctions with existing bidders if DisableBidFight is enabled
+    local auctionResults = {}
+    if DisableBidFight then
+        for _, result in ipairs(tempResults) do
+            if result.buyguid == 0 then
+                table.insert(auctionResults, result)
+            end
+        end
+    else
+        auctionResults = tempResults
+    end
+    
+    if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #auctionResults .. " potential auctions to process") end
+
+    if #auctionResults == 0 then return end
+
+    -- Get item entries for all auction item GUIDs
+    local itemGuids = {}
+    for _, auction in ipairs(auctionResults) do
+        table.insert(itemGuids, auction.itemguid)
+    end
+
+    local itemQuery = string.format("SELECT guid, itemEntry FROM item_instance WHERE guid IN (%s)", table.concat(itemGuids, ","))
+    CharDBQueryAsync(itemQuery, function(itemResults)
+        AHBot_Buy_ProcessItemResults(itemResults, auctionResults)
+    end)
+end
+
 local function AHBot_BuyAuction()
     local query
     if BotsBuyFromBots then
@@ -1883,198 +2093,7 @@ local function AHBot_BuyAuction()
         if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Starting buy cycle excluding bot sellers") end
     end
     
-	CharDBQueryAsync(query, function(results)
-		if not results then if BuyOnStartup and SellOnStartup then BuyOnStartup = false SendMessageToGMs("No eligible items to buy. Loading in new auctions...") RunCommand("reload auctions") end return end
-		
-		local tempResults = {}
-		local auctionResults = {}
-		
-		-- First, store all results in temporary table to not gum up the query handling
-		repeat
-			table.insert(tempResults, {
-				id = results:GetUInt32(0),
-				itemguid = results:GetUInt32(1),
-				houseid = results:GetUInt32(2),
-				itemowner = results:GetUInt32(3),
-				buyoutprice = results:GetUInt32(4),
-				buyguid = results:GetUInt32(5),
-				lastbid = results:GetUInt32(6),
-				startbid = results:GetUInt32(7),
-				bidtime = results:GetUInt32(8)
-			})
-		until not results:NextRow() or #tempResults >= ActionsPerCycle
-		
-		-- Then process the temporary table to remove entries we don't want to place bids/buyouts on
-		if DisableBidFight then
-			for _, result in ipairs(tempResults) do
-				if result.buyguid == 0 then -- Don't do anything if the auction already has a bidder
-					table.insert(auctionResults, result)
-				end
-			end
-		else
-			auctionResults = tempResults
-		end
-		
-        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #auctionResults .. " potential auctions to process") end
-
-        if not (#auctionResults > 0) then return end -- Prevents null query in item_instance table
-
-        local itemGuids = {}
-        for _, auction in ipairs(auctionResults) do
-            table.insert(itemGuids, auction.itemguid)
-        end
-
-        local itemQuery = string.format("SELECT guid, itemEntry FROM item_instance WHERE guid IN (%s)", table.concat(itemGuids, ","))
-
-        CharDBQueryAsync(itemQuery, function(itemResults)
-            if not itemResults then return end
-            
-            local itemEntries = {}
-            repeat
-                local guid = itemResults:GetUInt32(0)
-                local itemEntry = itemResults:GetUInt32(1)
-                itemEntries[guid] = itemEntry
-            until not itemResults:NextRow()
-            
-            local underpricedItems = {}
-            for _, item in pairs(itemCache) do
-                if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Evaluating item " .. item.entry .. " for price calculation") end
-                
-                local validItem = false
-                if ItemLevelLimit then
-                    if item.ItemLevel < ItemLevelLimit then 
-                        validItem = true 
-                        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Item " .. item.entry .. " meets level requirement of " .. ItemLevelLimit) end
-                    end
-                end
-
-                if validItem then
-                    if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Calculating price for valid item " .. item.entry) end
-                    local randomBot = AHBots[math.random(1, #AHBots)]
-                    local cost = ChooseCostFormula(CostFormula, item)
-
-                    cost = cost * BotsPriceTolerance
-                    if cost < 200000 then cost = math.random(50000, 250000) end
-                    if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Final adjusted cost for item " .. item.entry .. ": " .. cost) end
-
-                    for _, auction in ipairs(auctionResults) do
-                        if itemEntries[auction.itemguid] == item.entry and auction.buyoutprice < cost then
-                            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Buyer - Found underpriced item " .. item.entry .. " at " .. auction.buyoutprice .. " vs calculated " .. cost) end
-                            table.insert(underpricedItems, {
-                                entry = item.entry,
-                                currentPrice = auction.buyoutprice,
-                                calculatedValue = cost,
-                                auctionId = auction.id
-                            })
-                        end
-                    end
-                end
-            end
-
-            if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #underpricedItems .. " underpriced items to roll buyout/bid on.") end
-			
-			if #underpricedItems == 0 then
-				if BuyOnStartup and SellOnStartup then
-					BuyOnStartup = false
-					SendMessageToGMs("No eligible items to buy. Loading in new auctions...") RunCommand("reload auctions")
-				end
-				return
-			end
-
-			BuyOnStartup = false
-			
-            local transactions = {}
-            for _, item in ipairs(underpricedItems) do
-                if AHBotItemDebug then print("[Eluna AH Bot Debug]: Processing transaction chances for item " .. item.entry) end
-                local bidRoll = math.random(1, 100)
-                local buyoutRoll = math.random(1, 100)
-                local bidChance = bidRoll <= PlaceBidChance
-                local buyoutChance = buyoutRoll <= PlaceBuyoutChance
-
-                if buyoutRoll + bidRoll > 100 then
-                    bidRoll = 100 - buyoutRoll
-                    bidChance = bidRoll <= PlaceBidChance
-                    if AHBotItemDebug then print("[Eluna AH Bot Debug]: Adjusted bid roll for item " .. item.entry .. " to " .. bidRoll) end
-                end
-
-                local matchingAuction
-                for _, auction in ipairs(auctionResults) do
-                    if auction.id == item.auctionId then
-                        matchingAuction = auction
-                        break
-                    end
-                end
-
-				if matchingAuction then
-					local transactionType = nil
-					if buyoutRoll <= PlaceBuyoutChance then
-						transactionType = "buyout"
-					elseif bidRoll <= PlaceBidChance then
-						transactionType = "bid"
-					end
-
-					if transactionType then
-						local price
-						
-						if transactionType == "buyout" then
-							price = matchingAuction.buyoutprice
-						else  -- bid
-							local minBid = math.max(matchingAuction.startbid * 1.10, matchingAuction.buyoutprice * 0.60)
-							local maxBid = matchingAuction.buyoutprice * 0.95
-
-							if minBid >= maxBid then  -- If no valid bid range exists, default to  buyout
-								transactionType = "buyout"
-								price = matchingAuction.buyoutprice
-							else
-								price = math.random(minBid, maxBid)
-							end
-						end
-						
-						table.insert(transactions, {
-							transactionType = transactionType,
-							entry = item.entry,
-							itemGuid = matchingAuction.itemguid,
-							auctionId = matchingAuction.id,
-							itemOwner = matchingAuction.itemowner,
-							price = price,
-							houseid = matchingAuction.houseid
-						})
-					end
-				end
-            end
-			if #transactions > 0 then
-				local query = "UPDATE auctionhouse SET "
-				local ids = {}
-				local buyguidCases = {}
-				local lastbidCases = {}
-				local timeCases = {}
-
-				for _, transaction in ipairs(transactions) do
-					local randomBot = AHBots[math.random(1, #AHBots)]
-					table.insert(buyguidCases, "WHEN " .. transaction.auctionId .. " THEN " .. randomBot)
-					table.insert(lastbidCases, "WHEN " .. transaction.auctionId .. " THEN " .. transaction.price)
-					table.insert(ids, transaction.auctionId)
-
-					if transaction.transactionType == "buyout" then
-						table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN " .. os.time())
-					else
-						table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN time")
-					end
-				end
-
-				query = query .. "buyguid = CASE id " .. table.concat(buyguidCases, " ") .. " END, "
-				query = query .. "lastbid = CASE id " .. table.concat(lastbidCases, " ") .. " END, "
-				query = query .. "time = CASE id " .. table.concat(timeCases, " ") .. " END "
-				query = query .. "WHERE id IN(" .. table.concat(ids, ",") .. ")"
-
-				CharDBQueryAsync(query, function()
-					SendMessageToGMs("Refreshing auctions cache to pick up new bot transactions...")
-					RunCommand("reload auctions")
-					if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Finished placing " .. #transactions .. " buyouts/bids.") end
-				end)
-			end
-		end)
-    end)
+    CharDBQueryAsync(query, AHBot_Buy_ProcessAuctionResults)
 end
 
 ---------------------------------------------------------------------------------
