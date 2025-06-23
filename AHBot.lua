@@ -273,252 +273,129 @@ if EnableItemFilters then
 	local conditions = {} -- We must use a table to store conditions to ensure we're not overwriting "where" statements, in case any of the filter conditions are empty
 
 	if Expansion then
-		if Expansion == 1 then
-			table.insert(conditions, "entry NOT IN (" .. table.concat(ItemsVanilla, ',') .. ") AND entry < 24284")
-		elseif Expansion == 2 then
-			table.insert(conditions, "entry NOT IN (" .. table.concat(ItemsTBC, ',') .. ") AND entry < 39657")
-		elseif Expansion == 3 then
-			table.insert(conditions, "entry NOT IN (" .. table.concat(ItemsWotLK, ',') .. ") AND entry < 56807")
+		local expansionData = {
+			[1] = {items = ItemsVanilla, maxEntry = 24284},
+			[2] = {items = ItemsTBC, maxEntry = 39657},
+			[3] = {items = ItemsWotLK, maxEntry = 56807}
+		}
+		local exp = expansionData[Expansion]
+		if exp then
+			table.insert(conditions, "entry NOT IN (" .. table.concat(exp.items, ',') .. ") AND entry < " .. exp.maxEntry)
 		end
 	end
 	
+	-- Simple exclusions
 	if NeverSellIDs then
 		table.insert(conditions, "NOT entry IN (" .. table.concat(NeverSellIDs, ',') .. ")")
 	end
 	
+	-- Container size filter
 	if MinContainerSize then
-		table.insert(conditions, "NOT (class = 1 AND ContainerSlots < "..MinContainerSize..")")
-		table.insert(conditions, "NOT (class = 11 AND ContainerSlots < "..MinContainerSize..")")
+		table.insert(conditions, "NOT ((class = 1 OR class = 11) AND ContainerSlots < "..MinContainerSize..")")
 	end
 	
+	-- Class restrictions
 	if AllowedClassItems then
-		if AllowGlyphs then
-			table.insert(conditions, "(class = 16 OR AllowableClass IN (" .. table.concat(AllowedClassItems, ',') .. "))")
-		else
-			table.insert(conditions, "AllowableClass IN (" .. table.concat(AllowedClassItems, ',') .. ")")
+		local classFilter = AllowGlyphs and "(class = 16 OR AllowableClass IN (" or "AllowableClass IN ("
+		table.insert(conditions, classFilter .. table.concat(AllowedClassItems, ',') .. "))")
+	end
+	
+	-- Race restrictions
+	for _, raceGroup in ipairs({{AllowedHordeRaces}, {AllowedAllyRaces}}) do
+		if raceGroup[1] then
+			table.insert(conditions, "AllowableRace IN (" .. table.concat(raceGroup[1], ',') .. ")")
 		end
 	end
 	
-	if not AllowRecipes then
-		table.insert(conditions, "NOT (class = 9)")
+	-- Boolean filters with class/subclass/flag checks
+	local booleanFilters = {
+		{not AllowRecipes, "NOT (class = 9)"},
+		{not AllowCompanions, "NOT (class = 15 and subclass = 2)"},
+		{not AllowMounts, "NOT (class = 15 and subclass = 5)"},
+		{not AllowReputationItems, "RequiredReputationFaction = 0"},
+		{not AllowKeys, {"(BagFamily & 256) = 0", "NOT (class = 13 and subclass = 0)"}},
+		{not AllowConjured, "(flags & 2) = 0"},
+		{not AllowMisc, {"(BagFamily & 4) = 0", "(BagFamily & 2048) = 0", "NOT (class = 15 and subclass = 4)"}},
+		{not AllowQuestItems, {"(BagFamily & 16384) = 0", "NOT class = 12"}},
+		{not AllowLockpicking, "NOT (class = 13 and subclass = 1)"},
+		{not AllowConsumables, "NOT (class = 0)"},
+		{not AllowCommonAmmo, "NOT (class = 6 and quality < 2)"},
+		{not AllowHolidayItems, {"NOT (class = 15 and subclass = 3)", "HolidayId = 0"}},
+		{not AllowBindOnAccount, "(flags & 134217728) = 0"}
+	}
+	
+	for _, filter in ipairs(booleanFilters) do
+		if filter[1] then
+			if type(filter[2]) == "table" then
+				for _, condition in ipairs(filter[2]) do
+					table.insert(conditions, condition)
+				end
+			else
+				table.insert(conditions, filter[2])
+			end
+		end
 	end
 	
-	if not AllowCompanions then
-		table.insert(conditions, "NOT (class = 15 and subclass = 2)")
-	end
-	
-	if not AllowMounts then
-		table.insert(conditions, "NOT (class = 15 and subclass = 5)")
-	end
-	
-	if not AllowReputationItems then
-		table.insert(conditions, "RequiredReputationFaction = 0")
-	end
-	
-	if AllowedHordeRaces then
-		table.insert(conditions, "AllowableRace IN (" .. table.concat(AllowedHordeRaces, ',') .. ")")
-	end
-	
-	if AllowedAllyRaces then
-		table.insert(conditions, "AllowableRace IN (" .. table.concat(AllowedAllyRaces, ',') .. ")")
-	end
-	
-	if not AllowKeys then
-		table.insert(conditions, "(BagFamily & 256) = 0")
-		table.insert(conditions, "NOT (class = 13 and subclass = 0)")
-	end
-	
-	if not AllowConjured then
-		table.insert(conditions, "(flags & 2) = 0")
-	end
-	
-	if not AllowMisc then
-		table.insert(conditions, "(BagFamily & 4) = 0")
-		table.insert(conditions, "(BagFamily & 2048) = 0")
-		table.insert(conditions, "NOT (class = 15 and subclass = 4)")
-	end
-	
-	if not AllowQuestItems then
-		table.insert(conditions, "(BagFamily & 16384) = 0")
-		table.insert(conditions, "NOT class = 12")
-	end
-	
-	if not AllowLockpicking then
-		table.insert(conditions, "NOT (class = 13 and subclass = 1)")
-	end
-	
-	if not AllowConsumables then
-		table.insert(conditions, "NOT (class = 0)")
-	end
-	
-	if not AllowCommonAmmo then
-		table.insert(conditions, "NOT (class = 6 and quality < 2)")
-	end
-	
-	if not AllowHolidayItems then
-		table.insert(conditions, "NOT (class = 15 and subclass = 3)")
-		table.insert(conditions, "HolidayId = 0")
-	end 
-	
+	-- Quality and binding filters
 	if AllowedBinds then
 		table.insert(conditions, "bonding IN (" .. table.concat(AllowedBinds, ',') .. ")")
 	end
-
 	if AllowedQualities then
 		table.insert(conditions, "quality IN (" .. table.concat(AllowedQualities, ',') .. ")")
 	end
-
-	if not AllowDeprecated then
-		-- Obsolete/unused/unavailable items
-		table.insert(conditions, "(flags & 16) = 0")
-		table.insert(conditions, "NOT (NAME LIKE '%OLD%' AND NAME COLLATE utf8mb4_bin LIKE '%OLD%')")
-		table.insert(conditions, "UPPER(NAME) NOT LIKE '%NPC%'")
-		table.insert(conditions, "UPPER(NAME) NOT LIKE '%QA%'")
-		table.insert(conditions, "UPPER(NAME) NOT LIKE '%enchant ring%'")
-		table.insert(conditions, "NAME NOT LIKE '%tablet%'")
-		table.insert(conditions, "NAME NOT LIKE '%throwing dagger%'")
-		table.insert(conditions, "NAME NOT LIKE '%shot pouch%'")
-		table.insert(conditions, "NAME NOT LIKE '%brimstone%'")
-		table.insert(conditions, "NAME NOT LIKE '%small pouch%'")
-		table.insert(conditions, "NAME NOT LIKE '%stormjewel%'")
-		table.insert(conditions, "NAME NOT LIKE '%dye%'")
-		table.insert(conditions, "NAME NOT LIKE '%feathers of azeroth%'")
-		table.insert(conditions, "NAME NOT LIKE '%broken%throwing%'")
-		table.insert(conditions, "NAME NOT LIKE '%northrend meat%'")
-		table.insert(conditions, "NAME NOT LIKE '%ironwood seed%'")
-		table.insert(conditions, "NAME NOT LIKE '%stranglethorn seed%'")
-		table.insert(conditions, "NAME NOT LIKE '%simple wood%'")
-		table.insert(conditions, "NAME NOT LIKE '%small sack of coins%'")
-		table.insert(conditions, "NAME NOT LIKE '%slimy bag%'")
-		table.insert(conditions, "NAME NOT LIKE '%bleach%'")
-		table.insert(conditions, "NAME NOT LIKE '%oozing bag%'")
-		table.insert(conditions, "NAME NOT LIKE '%Pale Skinner%'")
-		table.insert(conditions, "NAME NOT LIKE '%Pioneer Buckler%'")
-		table.insert(conditions, "NAME NOT LIKE '%locust wing%'")
-		table.insert(conditions, "NAME NOT LIKE '%community token	%'")
-		table.insert(conditions, "NAME NOT LIKE '%thick citrine%'")
-		table.insert(conditions, "NAME NOT LIKE '%brilliant citrine%'")
-		table.insert(conditions, "NAME NOT LIKE '%nightbloom lilac%'")
-		table.insert(conditions, "NAME NOT LIKE '%flour%'")
-		table.insert(conditions, "NAME NOT LIKE '%brew%'")
-		table.insert(conditions, "NAME NOT LIKE '%[PH]%'")
-		table.insert(conditions, "NAME NOT LIKE '%(PH)%'")
-		table.insert(conditions, "NAME NOT LIKE '%fishing -%'")
-		table.insert(conditions, "NAME NOT LIKE '%Sandy Scorpid Claw%'")
-		table.insert(conditions, "NAME NOT LIKE '% caster %'")
-		table.insert(conditions, "NAME NOT LIKE '%Jeweler''s Kit%'")
-		table.insert(conditions, "NAME NOT LIKE '%nightmare berries%'")
-		table.insert(conditions, "NAME NOT LIKE '%parchment%'")
-		table.insert(conditions, "NAME NOT LIKE '%light quiver%'")
-		table.insert(conditions, "NAME NOT LIKE '%honey%'")
-		table.insert(conditions, "NAME NOT LIKE '%explosive shell%'")
-		table.insert(conditions, "NAME NOT LIKE '%envelope%'")
-		table.insert(conditions, "NAME NOT LIKE '%equipment kit%'")
-		table.insert(conditions, "NAME NOT LIKE '%/%'")
-		table.insert(conditions, "NAME NOT LIKE '%2.0%'")
-		table.insert(conditions, "NAME NOT LIKE '%creeping anguish%'")
-		table.insert(conditions, "NAME NOT LIKE '%felcloth bag%'")
-		table.insert(conditions, "NAME NOT LIKE '%elementium ore%'")
-		table.insert(conditions, "NAME NOT LIKE '%unused%'")
-		table.insert(conditions, "NAME NOT LIKE '%lava core%'")
-		table.insert(conditions, "NAME NOT LIKE '%fiery core%'")
-		table.insert(conditions, "NAME NOT LIKE '%sulfuron ingot%'")
-		table.insert(conditions, "NAME NOT LIKE '%sak%'")
-		table.insert(conditions, "NAME NOT LIKE '%gigantique%'")
-		table.insert(conditions, "NAME NOT LIKE '%portable hole%'")
-		table.insert(conditions, "NAME NOT LIKE '%deptecated%'")
-		table.insert(conditions, "NAME NOT LIKE '%durability%'")
-		table.insert(conditions, "NAME NOT LIKE '%big sack%'")
-		table.insert(conditions, "NAME NOT LIKE '%decoded%'")
-		table.insert(conditions, "NAME NOT LIKE '%knowledge:%'")
-		table.insert(conditions, "NAME NOT LIKE '%manual%'")
-		table.insert(conditions, "NAME NOT LIKE '%gnome head%'")
-		table.insert(conditions, "NAME NOT LIKE '%box of%'")
-		table.insert(conditions, "NAME NOT LIKE '%Light Feather%'")
-		table.insert(conditions, "NAME NOT LIKE '%Pet Stone%'")
-		table.insert(conditions, "NAME NOT LIKE '%Ogrela%'")
-		table.insert(conditions, "NAME NOT LIKE '%cache of%'")
-		table.insert(conditions, "NAME NOT LIKE '%summoning%'")
-		table.insert(conditions, "NAME NOT LIKE '%cut %'")
-		table.insert(conditions, "NAME NOT LIKE '%turtle egg%'")
-		table.insert(conditions, "NAME NOT LIKE '%jillian%'")
-		table.insert(conditions, "NAME NOT LIKE '%heavy crate%'")
-		table.insert(conditions, "NAME NOT LIKE '%plain letter%'")
-		table.insert(conditions, "NOT (CLASS = 15 AND NAME LIKE '%throw%')")
-		table.insert(conditions, "NAME NOT LIKE '%sack of gems%'")
-		table.insert(conditions, "NAME NOT LIKE '%plans: darkspear%'")
-		table.insert(conditions, "NAME NOT LIKE '%beetle husk%'")
-		table.insert(conditions, "NAME NOT LIKE '%froststeel bar%'")
-		table.insert(conditions, "NAME NOT LIKE '%firefly dust%'")
-		table.insert(conditions, "NAME NOT LIKE '%of swords%'")
-		table.insert(conditions, "NAME NOT LIKE '%gnomish alarm%'")
-		table.insert(conditions, "NAME NOT LIKE '%tome%'")
-		table.insert(conditions, "NOT (NAME LIKE '%broken%' AND NAME LIKE '%throwing%')")
-		table.insert(conditions, "NAME NOT LIKE '%ornate spyglass%'")
-		table.insert(conditions, "NAME NOT LIKE '%test%'")
-		table.insert(conditions, "NAME NOT LIKE '%darkmoon prize%'")
-		table.insert(conditions, "NAME NOT LIKE '%frostmourne%'")
-		table.insert(conditions, "NAME NOT LIKE '%codex%'")
-		table.insert(conditions, "NAME NOT LIKE '%the fall of ameth%'")
-		table.insert(conditions, "NAME NOT LIKE '%frostwolf artichoke%'")
-		table.insert(conditions, "NAME NOT LIKE '%symbol of kings%'")
-		table.insert(conditions, "NAME NOT LIKE '%symbol of divinity%'")
-		table.insert(conditions, "NAME NOT LIKE '%word of thawing%'")
-		table.insert(conditions, "NAME NOT LIKE '%grimoire%'")
-		table.insert(conditions, "NAME NOT LIKE '%deprecated%'")
-		table.insert(conditions, "NAME NOT LIKE '%cowardly flight%'")
-		table.insert(conditions, "NAME NOT LIKE '%book%'")
-		table.insert(conditions, "NAME NOT LIKE '%libram%'")
-		table.insert(conditions, "NAME NOT LIKE '%brazie''s%'")
-		table.insert(conditions, "NAME NOT LIKE '%guide%'")
-		table.insert(conditions, "NAME NOT LIKE '%glyphed breastplate%'")
-		table.insert(conditions, "NAME NOT LIKE '%weak flux%'")
-		table.insert(conditions, "NAME NOT LIKE '%leatherworking%'")
-		table.insert(conditions, "NAME NOT LIKE '%walnut stock%'")
-		table.insert(conditions, "NAME NOT LIKE '%virtuoso inking%'")
-		table.insert(conditions, "NAME NOT LIKE '%dictionary%'")
-		table.insert(conditions, "NAME NOT LIKE '%moonlit katana%'")
-		table.insert(conditions, "NAME NOT LIKE '%Omar%'")
-		table.insert(conditions, "NAME NOT LIKE '%depleted%'")
-		table.insert(conditions, "NAME NOT LIKE '%bottomless inscription bag%'")
-		table.insert(conditions, "NAME NOT LIKE '% Crate %' AND NAME NOT LIKE 'Crate %' AND NAME NOT LIKE '% Crate'")
-		table.insert(conditions, "NAME NOT LIKE '%90 Epic%'")
-		table.insert(conditions, "NAME NOT LIKE '%90 Blue%'")
-		table.insert(conditions, "NAME NOT LIKE '%90 Green%'")
-		-- Some quest items that show up despite the quest filters
-		table.insert(conditions, "NAME NOT LIKE '%blood shard%'")
-		table.insert(conditions, "NAME NOT LIKE '%dampscale basilisk eye%'")
-		table.insert(conditions, "NAME NOT LIKE '%evil bat eye%'")
-		table.insert(conditions, "NAME NOT LIKE '%package%'")
-		table.insert(conditions, "NAME NOT LIKE '%signet of beckoning%'")
-		table.insert(conditions, "NAME NOT LIKE '%silithid carapace%'")
-		table.insert(conditions, "NAME NOT LIKE '%smoke beacon%'")
-		table.insert(conditions, "NAME NOT LIKE '%shadoweave belt%'")
-		table.insert(conditions, "NAME NOT LIKE '%snickerfang jowl%'")
-		table.insert(conditions, "NAME NOT LIKE '%mojo%'")
-		table.insert(conditions, "NAME NOT LIKE '%singed%'")
-		-- Obsolete item class-subclass combinations
-		table.insert(conditions, "NOT (class = 8 and subclass = 0)")
-		table.insert(conditions, "NOT (class = 10 and subclass = 0)")
-		table.insert(conditions, "NOT (class = 11 and subclass = 0)")
-		table.insert(conditions, "NOT (class = 11 and subclass = 1)")
-	end
-
+	
+	-- Level filters
 	if MaxLevel then
 		table.insert(conditions, "RequiredLevel <= ".. MaxLevel)
 	end
-	
-	if not AllowBindOnAccount then
-		table.insert(conditions, "(flags & 134217728) = 0")
-	end
-
 	if MinLevelConsumables then
 		table.insert(conditions, "NOT (class = 0 AND RequiredLevel < " .. MinLevelConsumables .. ")")
 	end
-
 	if MinLevelGear then
-		table.insert(conditions, "NOT (class = 4 AND RequiredLevel < " .. MinLevelGear .. ")")
-		table.insert(conditions, "NOT (class = 2 AND RequiredLevel < " .. MinLevelGear .. ")")
+		table.insert(conditions, "NOT ((class = 4 OR class = 2) AND RequiredLevel < " .. MinLevelGear .. ")")
+	end
+	
+	-- Deprecated items filter
+	if not AllowDeprecated then
+		table.insert(conditions, "(flags & 16) = 0")
+		table.insert(conditions, "NOT (class = 8 and subclass = 0)")
+		table.insert(conditions, "NOT (class = 10 and subclass = 0)")
+		table.insert(conditions, "NOT ((class = 11 and subclass = 0) OR (class = 11 and subclass = 1))")
+		
+		-- Consolidated name exclusions
+		local nameExclusions = {
+			"'%OLD%'", "'%NPC%'", "'%QA%'", "'%enchant ring%'", "'%tablet%'", "'%throwing dagger%'",
+			"'%shot pouch%'", "'%brimstone%'", "'%small pouch%'", "'%stormjewel%'", "'%dye%'",
+			"'%feathers of azeroth%'", "'%broken%throwing%'", "'%northrend meat%'", "'%ironwood seed%'",
+			"'%stranglethorn seed%'", "'%simple wood%'", "'%small sack of coins%'", "'%slimy bag%'",
+			"'%bleach%'", "'%oozing bag%'", "'%Pale Skinner%'", "'%Pioneer Buckler%'", "'%locust wing%'",
+			"'%community token%'", "'%thick citrine%'", "'%brilliant citrine%'", "'%nightbloom lilac%'",
+			"'%flour%'", "'%brew%'", "'%[PH]%'", "'%(PH)%'", "'%fishing -%'", "'%Sandy Scorpid Claw%'",
+			"'% caster %'", "'%Jeweler''s Kit%'", "'%nightmare berries%'", "'%parchment%'",
+			"'%light quiver%'", "'%honey%'", "'%explosive shell%'", "'%envelope%'", "'%equipment kit%'",
+			"'%/%'", "'%2.0%'", "'%creeping anguish%'", "'%felcloth bag%'", "'%elementium ore%'",
+			"'%unused%'", "'%lava core%'", "'%fiery core%'", "'%sulfuron ingot%'", "'%sak%'",
+			"'%gigantique%'", "'%portable hole%'", "'%deptecated%'", "'%durability%'", "'%big sack%'",
+			"'%decoded%'", "'%knowledge:%'", "'%manual%'", "'%gnome head%'", "'%box of%'",
+			"'%Light Feather%'", "'%Pet Stone%'", "'%Ogrela%'", "'%cache of%'", "'%summoning%'",
+			"'%cut %'", "'%turtle egg%'", "'%jillian%'", "'%heavy crate%'", "'%plain letter%'",
+			"'%sack of gems%'", "'%plans: darkspear%'", "'%beetle husk%'", "'%froststeel bar%'",
+			"'%firefly dust%'", "'%of swords%'", "'%gnomish alarm%'", "'%tome%'", "'%ornate spyglass%'",
+			"'%test%'", "'%darkmoon prize%'", "'%frostmourne%'", "'%codex%'", "'%the fall of ameth%'",
+			"'%frostwolf artichoke%'", "'%symbol of kings%'", "'%symbol of divinity%'", "'%word of thawing%'",
+			"'%grimoire%'", "'%deprecated%'", "'%cowardly flight%'", "'%book%'", "'%libram%'",
+			"'%brazie''s%'", "'%guide%'", "'%glyphed breastplate%'", "'%weak flux%'", "'%leatherworking%'",
+			"'%walnut stock%'", "'%virtuoso inking%'", "'%dictionary%'", "'%moonlit katana%'",
+			"'%Omar%'", "'%depleted%'", "'%bottomless inscription bag%'", "'%90 Epic%'", "'%90 Blue%'",
+			"'%90 Green%'", "'%blood shard%'", "'%dampscale basilisk eye%'", "'%evil bat eye%'",
+			"'%package%'", "'%signet of beckoning%'", "'%silithid carapace%'", "'%smoke beacon%'",
+			"'%shadoweave belt%'", "'%snickerfang jowl%'", "'%mojo%'", "'%singed%'"
+		}
+		
+		table.insert(conditions, "UPPER(NAME) NOT LIKE " .. table.concat(nameExclusions, " AND UPPER(NAME) NOT LIKE "))
+		table.insert(conditions, "NAME NOT LIKE '% Crate %' AND NAME NOT LIKE 'Crate %' AND NAME NOT LIKE '% Crate'")
+		table.insert(conditions, "NOT (CLASS = 15 AND NAME LIKE '%throw%')")
+		table.insert(conditions, "NOT (NAME LIKE '%broken%' AND NAME LIKE '%throwing%')")
 	end
 
 	if #conditions > 0 then
@@ -581,126 +458,78 @@ local function SelectRandomItems()
         SpecificItems = {}
     }
     
+    -- Helper function to add weighted items to a group
+    local function addWeightedItems(group, item, weight)
+        for i = 1, weight do
+            table.insert(group, item)
+        end
+    end
+    
+    -- Group items by type and quality
     for _, item in pairs(itemCache) do
         if ItemWeights.SpecificItems[item.entry] then
-            local weight = ItemWeights.SpecificItems[item.entry]
-            for i = 1, weight do
-                table.insert(groupedItems.SpecificItems, item)
-            end
+            addWeightedItems(groupedItems.SpecificItems, item, ItemWeights.SpecificItems[item.entry])
         elseif item.class == 2 or item.class == 4 then
-            local Quality = item.Quality
-            groupedItems.Gear[Quality] = groupedItems.Gear[Quality] or {}
-            local weight = ItemWeights.Gear[getQualityString(Quality)]
-            for i = 1, weight do
-                table.insert(groupedItems.Gear[Quality], item)
-            end
+            local quality = item.Quality
+            groupedItems.Gear[quality] = groupedItems.Gear[quality] or {}
+            addWeightedItems(groupedItems.Gear[quality], item, ItemWeights.Gear[getQualityString(quality)])
         elseif item.class == 7 then
-            local Quality = item.Quality
-            groupedItems.Mats[Quality] = groupedItems.Mats[Quality] or {}
-            local weight = ItemWeights.Mats[getQualityString(Quality)]
-            for i = 1, weight do
-                table.insert(groupedItems.Mats[Quality], item)
-            end
+            local quality = item.Quality
+            groupedItems.Mats[quality] = groupedItems.Mats[quality] or {}
+            addWeightedItems(groupedItems.Mats[quality], item, ItemWeights.Mats[getQualityString(quality)])
         elseif item.class == 6 then
-            for i = 1, ItemWeights.Projectile do
-                table.insert(groupedItems.Projectile, item)
-            end
+            addWeightedItems(groupedItems.Projectile, item, ItemWeights.Projectile)
         elseif item.class == 16 then
-            for i = 1, ItemWeights.Glyph do
-                table.insert(groupedItems.Glyph, item)
-            end
+            addWeightedItems(groupedItems.Glyph, item, ItemWeights.Glyph)
         else
-            for i = 1, ItemWeights.Other do
-                table.insert(groupedItems.Other, item)
-            end
+            addWeightedItems(groupedItems.Other, item, ItemWeights.Other)
         end
+    end
+    
+    -- Helper function to add group to weight map if it has items
+    local function addToWeightMap(weightMap, items, weight, totalWeight)
+        if #items > 0 and weight > 0 then
+            totalWeight = totalWeight + weight
+            table.insert(weightMap, {
+                weight = weight,
+                items = items,
+                cumWeight = totalWeight
+            })
+        end
+        return totalWeight
     end
     
     local selectedItems = {}
     for i = 1, ActionsPerCycle do
-        -- Calculate total weight each time as groups may be emptied
         local totalWeight = 0
         local weightMap = {}
         
-        -- Add weights for Gear qualities that still have items
-        for Quality, items in pairs(groupedItems.Gear) do
-            if #items > 0 then
-                local weight = ItemWeights.Gear[getQualityString(Quality)]
-                if weight > 0 then
-                    totalWeight = totalWeight + weight
-                    table.insert(weightMap, {
-                        weight = weight,
-                        items = items,
-                        cumWeight = totalWeight
-                    })
-                end
+        -- Add quality-based groups (Gear and Mats)
+        for groupName, qualityGroups in pairs({Gear = groupedItems.Gear, Mats = groupedItems.Mats}) do
+            for quality, items in pairs(qualityGroups) do
+                local weight = ItemWeights[groupName][getQualityString(quality)]
+                totalWeight = addToWeightMap(weightMap, items, weight, totalWeight)
             end
         end
         
-        -- Add weights for Mats qualities that still have items
-        for Quality, items in pairs(groupedItems.Mats) do
-            if #items > 0 then
-                local weight = ItemWeights.Mats[getQualityString(Quality)]
-                if weight > 0 then
-                    totalWeight = totalWeight + weight
-                    table.insert(weightMap, {
-                        weight = weight,
-                        items = items,
-                        cumWeight = totalWeight
-                    })
-                end
-            end
-        end
+        -- Add simple groups
+        local simpleGroups = {
+            {groupedItems.Glyph, ItemWeights.Glyph},
+            {groupedItems.Projectile, ItemWeights.Projectile},
+            {groupedItems.Other, ItemWeights.Other},
+            {groupedItems.SpecificItems, #groupedItems.SpecificItems} -- Use count as weight
+        }
         
-        -- Add weight for Glyphs if any remain
-        if #groupedItems.Glyph > 0 then
-            totalWeight = totalWeight + ItemWeights.Glyph
-            table.insert(weightMap, {
-                weight = ItemWeights.Glyph,
-                items = groupedItems.Glyph,
-                cumWeight = totalWeight
-            })
-        end
-        
-        -- Add weight for Projectiles if any remain
-        if #groupedItems.Projectile > 0 then
-            totalWeight = totalWeight + ItemWeights.Projectile
-            table.insert(weightMap, {
-                weight = ItemWeights.Projectile,
-                items = groupedItems.Projectile,
-                cumWeight = totalWeight
-            })
-        end
-        
-        -- Add weight for Other if any remain
-        if #groupedItems.Other > 0 then
-            totalWeight = totalWeight + ItemWeights.Other
-            table.insert(weightMap, {
-                weight = ItemWeights.Other,
-                items = groupedItems.Other,
-                cumWeight = totalWeight
-            })
-        end
-        
-        -- Add combined weight for SpecificItems items if any remain
-        if #groupedItems.SpecificItems > 0 then
-            -- Use the total items count as the effective weight
-            local SpecificItemsWeight = #groupedItems.SpecificItems
-            totalWeight = totalWeight + SpecificItemsWeight
-            table.insert(weightMap, {
-                weight = SpecificItemsWeight,
-                items = groupedItems.SpecificItems,
-                cumWeight = totalWeight
-            })
+        for _, group in ipairs(simpleGroups) do
+            totalWeight = addToWeightMap(weightMap, group[1], group[2], totalWeight)
         end
         
         if totalWeight <= 0 then break end
         
-        -- Select a group based on weight
+        -- Select weighted random item
         local rand = math.random() * totalWeight
         for _, entry in ipairs(weightMap) do
             if rand <= entry.cumWeight then
-                -- Select random item from the chosen group
                 local items = entry.items
                 local itemIndex = math.random(1, #items)
                 table.insert(selectedItems, items[itemIndex])
