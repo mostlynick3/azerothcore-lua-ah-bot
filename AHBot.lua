@@ -201,6 +201,7 @@ local AHBotBuyEventId										-- Used to track if the indefinite Lua event for 
 local botList = table.concat(AHBots, ",") 					-- Converts table to a string for SQL and concat interaction
 local houseList = table.concat(EnabledAuctionHouses, ",")	-- Converts table to a string for SQL and concat interaction
 local postedAuctions = {} 									-- Counts how many auctions have been posted by the auction bots last. Used in info cmd
+local EnchantmentModule = require("EnchantmentModule")			-- For random item properties
 
 -- Early returns and MySQL error failsafes
 if not EnabledAuctionHouses then error("[Eluna AH Bot]: Core - No valid auction houses found!") end
@@ -765,6 +766,216 @@ end
 -- AH Bot Buyer Script
 ---------------------------------------------------------------------------------
 
+local function AHBot_Buy_ProcessItemResults(itemResults, auctionResults)
+    if not itemResults then return end
+    
+    local itemEntries = {}
+    repeat
+        local guid = itemResults:GetUInt32(0)
+        local itemEntry = itemResults:GetUInt32(1)
+        itemEntries[guid] = itemEntry
+    until not itemResults:NextRow()
+    
+    local underpricedItems = {}
+    for _, item in pairs(itemCache) do
+        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Evaluating item " .. item.entry .. " for price calculation") end
+        
+        local validItem = false
+        if ItemLevelLimit then
+            if item.ItemLevel < ItemLevelLimit then 
+                validItem = true 
+                if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Item " .. item.entry .. " meets level requirement of " .. ItemLevelLimit) end
+            end
+        end
+
+        if validItem then
+            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Calculating price for valid item " .. item.entry) end
+            local cost = ChooseCostFormula(CostFormula, item) * BotsPriceTolerance
+            if cost < 200000 then cost = math.random(50000, 250000) end
+            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Final adjusted cost for item " .. item.entry .. ": " .. cost) end
+
+            for _, auction in ipairs(auctionResults) do
+                if itemEntries[auction.itemguid] == item.entry and auction.buyoutprice < cost then
+                    if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Buyer - Found underpriced item " .. item.entry .. " at " .. auction.buyoutprice .. " vs calculated " .. cost) end
+                    table.insert(underpricedItems, {
+                        entry = item.entry,
+                        currentPrice = auction.buyoutprice,
+                        calculatedValue = cost,
+                        auctionId = auction.id
+                    })
+                end
+            end
+        end
+    end
+
+    if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #underpricedItems .. " underpriced items to roll buyout/bid on.") end
+    
+    if #underpricedItems == 0 then
+        if BuyOnStartup and SellOnStartup then
+            BuyOnStartup = false
+            SendMessageToGMs("No eligible items to buy. Loading in new auctions...")
+            RunCommand("reload auctions")
+        end
+        return
+    end
+
+    BuyOnStartup = false
+    AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
+end
+
+local function AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
+    local transactions = {}
+    
+    for _, item in ipairs(underpricedItems) do
+        if AHBotItemDebug then print("[Eluna AH Bot Debug]: Processing transaction chances for item " .. item.entry) end
+        
+        local buyoutRoll = math.random(1, 100)
+        local bidRoll = math.random(1, 100)
+        
+        -- Ensure rolls don't exceed 100% combined probability
+        if buyoutRoll + bidRoll > 100 then
+            bidRoll = 100 - buyoutRoll
+            if AHBotItemDebug then print("[Eluna AH Bot Debug]: Adjusted bid roll for item " .. item.entry .. " to " .. bidRoll) end
+        end
+
+        local matchingAuction
+        for _, auction in ipairs(auctionResults) do
+            if auction.id == item.auctionId then
+                matchingAuction = auction
+                break
+            end
+        end
+
+        if matchingAuction then
+            local transactionType = nil
+            if buyoutRoll <= PlaceBuyoutChance then
+                transactionType = "buyout"
+            elseif bidRoll <= PlaceBidChance then
+                transactionType = "bid"
+            end
+
+            if transactionType then
+                local price
+                
+                if transactionType == "buyout" then
+                    price = matchingAuction.buyoutprice
+                else  -- bid
+                    local minBid = math.max(matchingAuction.startbid * 1.10, matchingAuction.buyoutprice * 0.60)
+                    local maxBid = matchingAuction.buyoutprice * 0.95
+
+                    if minBid >= maxBid then  -- If no valid bid range exists, default to buyout
+                        transactionType = "buyout"
+                        price = matchingAuction.buyoutprice
+                    else
+                        price = math.random(minBid, maxBid)
+                    end
+                end
+                
+                table.insert(transactions, {
+                    transactionType = transactionType,
+                    entry = item.entry,
+                    itemGuid = matchingAuction.itemguid,
+                    auctionId = matchingAuction.id,
+                    itemOwner = matchingAuction.itemowner,
+                    price = price,
+                    houseid = matchingAuction.houseid
+                })
+            end
+        end
+    end
+    
+    if #transactions > 0 then
+        AHBot_Buy_ExecuteTransactions(transactions)
+    end
+end
+
+local function AHBot_Buy_ExecuteTransactions(transactions)
+    local ids = {}
+    local buyguidCases = {}
+    local lastbidCases = {}
+    local timeCases = {}
+
+    for _, transaction in ipairs(transactions) do
+        local randomBot = AHBots[math.random(1, #AHBots)]
+        table.insert(buyguidCases, "WHEN " .. transaction.auctionId .. " THEN " .. randomBot)
+        table.insert(lastbidCases, "WHEN " .. transaction.auctionId .. " THEN " .. transaction.price)
+        table.insert(ids, transaction.auctionId)
+
+        if transaction.transactionType == "buyout" then
+            table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN " .. os.time())
+        else
+            table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN time")
+        end
+    end
+
+    local query = "UPDATE auctionhouse SET " ..
+                  "buyguid = CASE id " .. table.concat(buyguidCases, " ") .. " END, " ..
+                  "lastbid = CASE id " .. table.concat(lastbidCases, " ") .. " END, " ..
+                  "time = CASE id " .. table.concat(timeCases, " ") .. " END " ..
+                  "WHERE id IN(" .. table.concat(ids, ",") .. ")"
+
+    CharDBQueryAsync(query, function()
+        SendMessageToGMs("Refreshing auctions cache to pick up new bot transactions...")
+        RunCommand("reload auctions")
+        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Finished placing " .. #transactions .. " buyouts/bids.") end
+    end)
+end
+
+local function AHBot_Buy_ProcessAuctionResults(results)
+    if not results then 
+        if BuyOnStartup and SellOnStartup then 
+            BuyOnStartup = false 
+            SendMessageToGMs("No eligible items to buy. Loading in new auctions...") 
+            RunCommand("reload auctions") 
+        end 
+        return 
+    end
+    
+    local tempResults = {}
+    
+    -- Store all results in temporary table
+    repeat
+        table.insert(tempResults, {
+            id = results:GetUInt32(0),
+            itemguid = results:GetUInt32(1),
+            houseid = results:GetUInt32(2),
+            itemowner = results:GetUInt32(3),
+            buyoutprice = results:GetUInt32(4),
+            buyguid = results:GetUInt32(5),
+            lastbid = results:GetUInt32(6),
+            startbid = results:GetUInt32(7),
+            bidtime = results:GetUInt32(8)
+        })
+    until not results:NextRow() or #tempResults >= ActionsPerCycle
+    
+    -- Filter out auctions with existing bidders if DisableBidFight is enabled
+    local auctionResults = {}
+    if DisableBidFight then
+        for _, result in ipairs(tempResults) do
+            if result.buyguid == 0 then
+                table.insert(auctionResults, result)
+            end
+        end
+    else
+        auctionResults = tempResults
+    end
+    
+    if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #auctionResults .. " potential auctions to process") end
+
+    if #auctionResults == 0 then return end
+
+    -- Get item entries for all auction item GUIDs
+    local itemGuids = {}
+    for _, auction in ipairs(auctionResults) do
+        table.insert(itemGuids, auction.itemguid)
+    end
+
+    local itemQuery = string.format("SELECT guid, itemEntry FROM item_instance WHERE guid IN (%s)", table.concat(itemGuids, ","))
+    CharDBQueryAsync(itemQuery, function(itemResults)
+        AHBot_Buy_ProcessItemResults(itemResults, auctionResults)
+    end)
+end
+
 local function AHBot_BuyAuction()
     local query
     if BotsBuyFromBots then
@@ -775,198 +986,7 @@ local function AHBot_BuyAuction()
         if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Starting buy cycle excluding bot sellers") end
     end
     
-	CharDBQueryAsync(query, function(results)
-		if not results then if BuyOnStartup and SellOnStartup then BuyOnStartup = false SendMessageToGMs("No eligible items to buy. Loading in new auctions...") RunCommand("reload auctions") end return end
-		
-		local tempResults = {}
-		local auctionResults = {}
-		
-		-- First, store all results in temporary table to not gum up the query handling
-		repeat
-			table.insert(tempResults, {
-				id = results:GetUInt32(0),
-				itemguid = results:GetUInt32(1),
-				houseid = results:GetUInt32(2),
-				itemowner = results:GetUInt32(3),
-				buyoutprice = results:GetUInt32(4),
-				buyguid = results:GetUInt32(5),
-				lastbid = results:GetUInt32(6),
-				startbid = results:GetUInt32(7),
-				bidtime = results:GetUInt32(8)
-			})
-		until not results:NextRow() or #tempResults >= ActionsPerCycle
-		
-		-- Then process the temporary table to remove entries we don't want to place bids/buyouts on
-		if DisableBidFight then
-			for _, result in ipairs(tempResults) do
-				if result.buyguid == 0 then -- Don't do anything if the auction already has a bidder
-					table.insert(auctionResults, result)
-				end
-			end
-		else
-			auctionResults = tempResults
-		end
-		
-        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #auctionResults .. " potential auctions to process") end
-
-        if not (#auctionResults > 0) then return end -- Prevents null query in item_instance table
-
-        local itemGuids = {}
-        for _, auction in ipairs(auctionResults) do
-            table.insert(itemGuids, auction.itemguid)
-        end
-
-        local itemQuery = string.format("SELECT guid, itemEntry FROM item_instance WHERE guid IN (%s)", table.concat(itemGuids, ","))
-
-        CharDBQueryAsync(itemQuery, function(itemResults)
-            if not itemResults then return end
-            
-            local itemEntries = {}
-            repeat
-                local guid = itemResults:GetUInt32(0)
-                local itemEntry = itemResults:GetUInt32(1)
-                itemEntries[guid] = itemEntry
-            until not itemResults:NextRow()
-            
-            local underpricedItems = {}
-            for _, item in pairs(itemCache) do
-                if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Evaluating item " .. item.entry .. " for price calculation") end
-                
-                local validItem = false
-                if ItemLevelLimit then
-                    if item.ItemLevel < ItemLevelLimit then 
-                        validItem = true 
-                        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Item " .. item.entry .. " meets level requirement of " .. ItemLevelLimit) end
-                    end
-                end
-
-                if validItem then
-                    if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Calculating price for valid item " .. item.entry) end
-                    local randomBot = AHBots[math.random(1, #AHBots)]
-                    local cost = ChooseCostFormula(CostFormula, item)
-
-                    cost = cost * BotsPriceTolerance
-                    if cost < 200000 then cost = math.random(50000, 250000) end
-                    if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Final adjusted cost for item " .. item.entry .. ": " .. cost) end
-
-                    for _, auction in ipairs(auctionResults) do
-                        if itemEntries[auction.itemguid] == item.entry and auction.buyoutprice < cost then
-                            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Buyer - Found underpriced item " .. item.entry .. " at " .. auction.buyoutprice .. " vs calculated " .. cost) end
-                            table.insert(underpricedItems, {
-                                entry = item.entry,
-                                currentPrice = auction.buyoutprice,
-                                calculatedValue = cost,
-                                auctionId = auction.id
-                            })
-                        end
-                    end
-                end
-            end
-
-            if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Found " .. #underpricedItems .. " underpriced items to roll buyout/bid on.") end
-			
-			if #underpricedItems == 0 then
-				if BuyOnStartup and SellOnStartup then
-					BuyOnStartup = false
-					SendMessageToGMs("No eligible items to buy. Loading in new auctions...") RunCommand("reload auctions")
-				end
-				return
-			end
-
-			BuyOnStartup = false
-			
-            local transactions = {}
-            for _, item in ipairs(underpricedItems) do
-                if AHBotItemDebug then print("[Eluna AH Bot Debug]: Processing transaction chances for item " .. item.entry) end
-                local bidRoll = math.random(1, 100)
-                local buyoutRoll = math.random(1, 100)
-                local bidChance = bidRoll <= PlaceBidChance
-                local buyoutChance = buyoutRoll <= PlaceBuyoutChance
-
-                if buyoutRoll + bidRoll > 100 then
-                    bidRoll = 100 - buyoutRoll
-                    bidChance = bidRoll <= PlaceBidChance
-                    if AHBotItemDebug then print("[Eluna AH Bot Debug]: Adjusted bid roll for item " .. item.entry .. " to " .. bidRoll) end
-                end
-
-                local matchingAuction
-                for _, auction in ipairs(auctionResults) do
-                    if auction.id == item.auctionId then
-                        matchingAuction = auction
-                        break
-                    end
-                end
-
-				if matchingAuction then
-					local transactionType = nil
-					if buyoutRoll <= PlaceBuyoutChance then
-						transactionType = "buyout"
-					elseif bidRoll <= PlaceBidChance then
-						transactionType = "bid"
-					end
-
-					if transactionType then
-						local price
-						
-						if transactionType == "buyout" then
-							price = matchingAuction.buyoutprice
-						else  -- bid
-							local minBid = math.max(matchingAuction.startbid * 1.10, matchingAuction.buyoutprice * 0.60)
-							local maxBid = matchingAuction.buyoutprice * 0.95
-
-							if minBid >= maxBid then  -- If no valid bid range exists, default to  buyout
-								transactionType = "buyout"
-								price = matchingAuction.buyoutprice
-							else
-								price = math.random(minBid, maxBid)
-							end
-						end
-						
-						table.insert(transactions, {
-							transactionType = transactionType,
-							entry = item.entry,
-							itemGuid = matchingAuction.itemguid,
-							auctionId = matchingAuction.id,
-							itemOwner = matchingAuction.itemowner,
-							price = price,
-							houseid = matchingAuction.houseid
-						})
-					end
-				end
-            end
-			if #transactions > 0 then
-				local query = "UPDATE auctionhouse SET "
-				local ids = {}
-				local buyguidCases = {}
-				local lastbidCases = {}
-				local timeCases = {}
-
-				for _, transaction in ipairs(transactions) do
-					local randomBot = AHBots[math.random(1, #AHBots)]
-					table.insert(buyguidCases, "WHEN " .. transaction.auctionId .. " THEN " .. randomBot)
-					table.insert(lastbidCases, "WHEN " .. transaction.auctionId .. " THEN " .. transaction.price)
-					table.insert(ids, transaction.auctionId)
-
-					if transaction.transactionType == "buyout" then
-						table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN " .. os.time())
-					else
-						table.insert(timeCases, "WHEN " .. transaction.auctionId .. " THEN time")
-					end
-				end
-
-				query = query .. "buyguid = CASE id " .. table.concat(buyguidCases, " ") .. " END, "
-				query = query .. "lastbid = CASE id " .. table.concat(lastbidCases, " ") .. " END, "
-				query = query .. "time = CASE id " .. table.concat(timeCases, " ") .. " END "
-				query = query .. "WHERE id IN(" .. table.concat(ids, ",") .. ")"
-
-				CharDBQueryAsync(query, function()
-					SendMessageToGMs("Refreshing auctions cache to pick up new bot transactions...")
-					RunCommand("reload auctions")
-					if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - Finished placing " .. #transactions .. " buyouts/bids.") end
-				end)
-			end
-		end)
-    end)
+    CharDBQueryAsync(query, AHBot_Buy_ProcessAuctionResults)
 end
 
 ---------------------------------------------------------------------------------
@@ -976,372 +996,366 @@ end
 local currentHouse = 0
 local lastAuctionId
 
+local function ProcessItemCreation(selectedItems, houseId, availableGuids, availableIds)
+    local itemQueryParts = {}
+    local auctionQueryParts = {}
+    local auctionCount = 0
+    
+    for _, item in ipairs(selectedItems) do
+        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Processing item "..item.name) end
+        
+        local isAllowed = IsItemAllowedForHouse(item, houseId)
+        
+        if not isAllowed then
+            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Removing item " .. item.name .. " from queue due to belonging to another faction than auction house ID "..houseId) end
+        else
+            auctionCount = auctionCount + 1
+            lastItemId = availableGuids[1]
+            table.remove(availableGuids, 1)
+            lastAuctionId = availableIds[1]
+            table.remove(availableIds, 1)
+            
+            local randomBot = AHBots[math.random(1, #AHBots)]
+            local cost = CalculateItemCost(item, randomBot)
+            local stack = CalculateStackSize(item)
+            local expireTime = os.time() + math.random(6 * 3600, 48 * 3600)
+            
+            cost = cost * stack
+            
+            if SellPriceVariance then
+                cost = cost * math.random(1 - (SellPriceVariance/100), 1 + (SellPriceVariance/100))
+            end
+            
+            cost = math.floor(cost)
+            local startBid = math.floor(cost * (math.random(51, 90) / 100))
+            
+            local randomStats, enchantString = EnchantmentModule.ApplyRandomEnchantments(item)
+            
+            -- Add item_instance entry
+            table.insert(itemQueryParts, "(" .. lastItemId .. ", " .. item.entry .. ", " .. randomBot .. ", " .. item.craftedBy .. ", 0, " .. stack .. ", 0, '" ..
+                item.c1 .. " " .. item.c2 .. " " .. item.c3 .. " " .. item.c4 .. " " .. item.c5 .. "', 0, '"..enchantString.."', " ..
+                randomStats .. ", " .. item.durability .. ", "..item.duration..", '')")
+
+            -- Add auction entry
+            table.insert(auctionQueryParts, string.format("(%d, %d, %d, %d, %d, %d, 0, 0, %d, 1, %d)",
+                lastAuctionId, houseId, lastItemId, randomBot, cost, expireTime, startBid, AddedByEluna))
+        end
+    end
+    
+    if #itemQueryParts > 0 and #auctionQueryParts > 0 then
+        ExecuteItemAndAuctionQueries(itemQueryParts, auctionQueryParts, auctionCount, houseId)
+    end
+end
+
+local function IsItemAllowedForHouse(item, houseId)
+    if houseId == 7 or item.race == 2147483647 or item.race == -1 then 
+        return true
+    elseif houseId == 2 then -- Alliance AH
+        for _, race in ipairs(AllowedAllyRaces) do
+            if (bitAnd(item.race, race) ~= 0) then 
+                return true
+            end
+        end
+    elseif houseId == 6 then -- Horde AH
+        for _, race in ipairs(AllowedHordeRaces) do
+            if (bitAnd(item.race, race) ~= 0) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function CalculateItemCost(item, randomBot)
+    local cost = ChooseCostFormula(CostFormula, item)
+    
+    -- Item type price adjustments
+    if RecipePriceAdjustment and item.class == 9 and not item.name:find("Design:") then 
+        cost = cost * RecipePriceAdjustment 
+    end
+    
+    if GemPriceAdjustment and item.class == 3 then 
+        cost = cost * GemPriceAdjustment * (1 + (math.random() * 0.4 - 0.2)) 
+    end
+    
+    if UndervaluedItemAdjust and cost < 50000 then 
+        if ((item.class == 7 and item.entry > 40000) or (item.name:find("VIII"))) and not (item.Quality > 2 or item.entry == 41511) then 
+            cost = cost * UndervaluedItemAdjust 
+        end 
+    end
+    
+    -- Failsafe for extremely low costs
+    if not cost or cost < 1000 then 
+        cost = math.random(10000, 100000) 
+    end
+    
+    -- Special handling for high-level bracers
+    if item.class == 4 and item.ItemLevel > 200 and item.InventoryType == 9 and item.bonding == 2 then 
+        if cost < 500000 then cost = cost * 100 end 
+    end 
+    
+    -- Handle pets and glyphs
+    if LowPriceFloor then
+        if (((item.class == 15 and item.subclass == 2) or (item.class == 16)) and cost < 200000) then 
+            cost = LowPriceFloor * (math.random() * 0.6 + 0.7) 
+        end
+    elseif UndervaluedItemAdjust then 
+        if (((item.class == 15 and item.subclass == 2) or (item.class == 16)) and cost < 200000) then 
+            cost = cost * UndervaluedItemAdjust 
+        end 
+    end
+    
+    -- Adjusted ammo prices
+    if AdjustedAmmoPrices and item.class == 6 then
+        local ammoPrices = {
+            [1] = {150, 5000},
+            [2] = {10000, 100000},
+            [3] = {100000, 150000},
+            [4] = {200000, 350000},
+            [5] = {350000, 1000000}
+        }
+        local priceRange = ammoPrices[item.Quality]
+        if priceRange then
+            cost = math.random(priceRange[1], priceRange[2])
+        end
+    end
+    
+    -- Set crafted by
+    if item.craftedBy == 1 then 
+        item.craftedBy = randomBot 
+    end
+    
+    return cost
+end
+
+local function CalculateStackSize(item)
+    local stack = 1
+    
+    if item.class == 6 and AlwaysMaxStackAmmo then
+        stack = item.stackable
+    elseif StackedItemClasses then
+        for _, itemClass in ipairs(StackedItemClasses) do
+            if item.class == itemClass then
+                if item.stackable > 10 then
+                    stack = math.ceil(math.random(8, item.stackable))
+                else
+                    stack = math.ceil(math.random(1, item.stackable))
+                end
+            end
+        end
+    end
+    
+    return stack
+end
+
+local function ExecuteItemAndAuctionQueries(itemQueryParts, auctionQueryParts, auctionCount, houseId)
+    local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
+    local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
+    
+    CharDBQueryAsync(itemQuery, function(results)
+        CharDBQueryAsync(auctionQuery, function(results)
+            HandleAuctionCompletion(auctionCount, houseId)
+        end)
+    end)
+end
+
+local function HandleAuctionCompletion(auctionCount, houseId)
+    if AHBotActionDebug then 
+        print("[Eluna AH Bot Debug]: Seller - " .. auctionCount .. " auctions added to auction house no. " .. houseId .. ".") 
+    end
+    
+    currentHouse = currentHouse - houseId
+    
+    if currentHouse == 0 then
+        if BuyOnStartup then
+            if AHBotActionDebug then 
+                print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, proceeding to initiate buyers...") 
+            end
+            AHBot_BuyAuction()
+            SendMessageToGMs("AH bot sellers initiated. Starting buyers...")
+            return
+        end
+        
+        if AHBotActionDebug then 
+            print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") 
+        end
+        SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
+        RunCommand("reload auctions")
+        NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
+        return
+    end
+    
+    if AHBotActionDebug then 
+        print("[Eluna AH Bot Debug]: Seller - Scheduling processing of next house ID.") 
+    end
+    AddAuctions()
+end
+
+local function ProcessAuctionIds(result, selectedItems, houseId, availableGuids)
+    local availableIds = {}
+    local maxId = 0
+    local usedIds = {}
+    local MaxIdNotAddedByEluna = 0
+    local NotAddedByEluna
+    local isEmpty = true
+   
+    if result then 
+        repeat
+            isEmpty = false
+            local id = result:GetUInt32(0)
+            local AddedByEluna = result:GetUInt32(1)
+           
+            usedIds[id] = true
+            maxId = math.max(maxId, id)
+           
+            if AddedByEluna == 0 then
+                MaxIdNotAddedByEluna = math.max(MaxIdNotAddedByEluna, id)
+                NotAddedByEluna = true
+            end
+        until not result:NextRow() 
+    end
+    
+    if MaxIdNotAddedByEluna == 0 then MaxIdNotAddedByEluna = maxId end
+    
+    if isEmpty then -- If table is empty, start from 10,000,000
+        local nextId = 10000000
+        while #availableIds < ActionsPerCycle do
+            table.insert(availableIds, nextId)
+            nextId = nextId + 1
+        end
+    else
+        local upperBound = NotAddedByEluna and MaxIdNotAddedByEluna or maxId
+        
+        if NotAddedByEluna then -- Fill in gaps if there are non-Eluna auctions
+            for i = 1, upperBound do
+                if not usedIds[i] then
+                    table.insert(availableIds, i)
+                    if #availableIds >= ActionsPerCycle then
+                        break
+                    end
+                end
+            end
+        else -- Continue from highest ID if only Eluna auctions exist
+            local nextId = maxId + 1
+            while #availableIds < ActionsPerCycle do
+                table.insert(availableIds, nextId)
+                nextId = nextId + 1
+            end
+        end
+        
+        -- Add more IDs if needed
+        if #availableIds < ActionsPerCycle then
+            local nextId = math.max(MaxIdNotAddedByEluna + 10000000, maxId + 1)
+            while #availableIds < ActionsPerCycle do
+                table.insert(availableIds, nextId)
+                nextId = nextId + 1
+            end
+        end
+    end
+    
+    ProcessItemCreation(selectedItems, houseId, availableGuids, availableIds)
+end
+
+local function ProcessItemGuids(itemResult, selectedItems, houseId)
+    local availableGuids = {}
+    local maxGuid = 0
+    local usedGuids = {}
+    
+    -- Get highest and second highest AddedByEluna and build used GUIDs set
+    local highestAddedByEluna = 0
+    local NotAddedByEluna = 0
+    local maxGuidForSecondHighest = 0
+    
+    repeat
+        local guid = itemResult:GetUInt32(0)
+        local AddedByEluna = itemResult:GetUInt32(1)
+        
+        usedGuids[guid] = true
+        maxGuid = math.max(maxGuid, guid)
+        
+        if AddedByEluna > highestAddedByEluna then
+            NotAddedByEluna = highestAddedByEluna
+            highestAddedByEluna = AddedByEluna
+        elseif AddedByEluna > NotAddedByEluna and AddedByEluna < highestAddedByEluna then
+            NotAddedByEluna = AddedByEluna
+        end
+        
+        if AddedByEluna == NotAddedByEluna then
+            maxGuidForSecondHighest = math.max(maxGuidForSecondHighest, guid)
+        end
+    until not itemResult:NextRow()
+    
+    -- Find available GUIDs
+    local upperBound = NotAddedByEluna > 0 and maxGuidForSecondHighest or maxGuid
+    
+    for i = 1, upperBound do
+        if not usedGuids[i] then
+            table.insert(availableGuids, i)
+            if #availableGuids >= ActionsPerCycle then
+                break
+            end
+        end
+    end
+    
+    -- Add more GUIDs if needed
+    if #availableGuids < ActionsPerCycle then
+        local nextGuid = (usedGuids[maxGuid] and highestAddedByEluna > 0) and (maxGuid + 1) or (maxGuid + 10000000)
+        
+        while #availableGuids < ActionsPerCycle do
+            table.insert(availableGuids, nextGuid)
+            nextGuid = nextGuid + 1
+        end
+    end
+    
+    if AHBotActionDebug then 
+        print("[Eluna AH Bot Debug]: Seller - Found " .. #availableGuids .. " available item GUIDs for next batch") 
+    end
+    
+    CharDBQueryAsync("SELECT id, AddedByEluna FROM auctionhouse ORDER BY AddedByEluna DESC", function(result)
+        ProcessAuctionIds(result, selectedItems, houseId, availableGuids)
+    end)
+end
+
+local function ProcessAuctionCheck(auctionCount, houseId)
+    if (auctionCount < MinAuctions) or (specificHouse or ((auctionCount < MaxAuctions) and (math.random(100) <= RepopulationChance))) then
+        local selectedItems = SelectRandomItems()
+        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Item selection complete.") end
+
+        CharDBQueryAsync("SELECT guid, AddedByEluna FROM item_instance ORDER BY AddedByEluna DESC", function(itemResult)
+            ProcessItemGuids(itemResult, selectedItems, houseId)
+        end)
+    else
+        if AHBotActionDebug then 
+            print("[Eluna AH Bot Debug]: Seller - Action house at capacity (Min auctions: "..MinAuctions..". Current auctions: ".. tostring(auctionCount) .." / " .. MaxAuctions .. "). No action taken, awaiting next cycle on ".. os.date("%H:%M", NextAHBotSellCycle) .. " server time.") 
+        end
+        if BuyOnStartup then
+            AHBot_BuyAuction()
+        end
+    end
+end
+
 local function AddAuctions(specificHouse)
-	local houseId = 0
-	
-	if specificHouse then currentHouse = specificHouse end
-	
-	if currentHouse == 15 or currentHouse == 13 or currentHouse == 9 or currentHouse == 7 then houseId = 7
-	elseif currentHouse == 8 or currentHouse == 6 then houseId = 6
-	elseif currentHouse == 2 then houseId = 2 end
-	
-	if houseId == 0 then return end
-	
-	if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Processing auctions for house ID: " .. houseId) end
-	
-	CheckAuctions(houseId, function(auctionCount) -- Check how many auctions posted by the AH bot are on the AH
-		if (auctionCount < MinAuctions) or (specificHouse or ((auctionCount < MaxAuctions) and (math.random(100) <= RepopulationChance))) then
-			local selectedItems = SelectRandomItems()
-			if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Item selection complete.") end
-	
-			CharDBQueryAsync("SELECT guid, AddedByEluna FROM item_instance ORDER BY AddedByEluna DESC", function(itemResult)
-				local availableGuids = {}
-				local maxGuid = 0
-				local usedGuids = {}
-				
-				-- Get highest and second highest AddedByEluna and build used GUIDs set
-				local highestAddedByEluna = 0
-				local NotAddedByEluna = 0
-				local maxGuidForSecondHighest = 0
-				
-				repeat
-					local guid = itemResult:GetUInt32(0)
-					local AddedByEluna = itemResult:GetUInt32(1)
-					
-					usedGuids[guid] = true
-					maxGuid = math.max(maxGuid, guid)
-					
-					if AddedByEluna > highestAddedByEluna then
-						NotAddedByEluna = highestAddedByEluna
-						highestAddedByEluna = AddedByEluna
-					elseif AddedByEluna > NotAddedByEluna and AddedByEluna < highestAddedByEluna then
-						NotAddedByEluna = AddedByEluna
-					end
-					
-					if AddedByEluna == NotAddedByEluna then
-						maxGuidForSecondHighest = math.max(maxGuidForSecondHighest, guid)
-					end
-				until not itemResult:NextRow()
-				
-				-- If only one AddedByEluna found, use maxGuid as the upper bound
-				local upperBound = NotAddedByEluna > 0 and maxGuidForSecondHighest or maxGuid
-				
-				-- Find available GUIDs below the upper bound
-				for i = 1, upperBound do
-					if not usedGuids[i] then
-						table.insert(availableGuids, i)
-						if #availableGuids >= ActionsPerCycle then
-							break
-						end
-					end
-				end
-				
-				-- If we need more GUIDs, check the AddedByEluna status of maxGuid
-				if #availableGuids < ActionsPerCycle then
-					local nextGuid
-					-- If maxGuid was added by Eluna (AddedByEluna = 1), just continue from there
-					if usedGuids[maxGuid] and highestAddedByEluna > 0 then
-						nextGuid = maxGuid + 1
-					else
-						-- If not added by Eluna, start at maxGuid + 10mln
-						nextGuid = maxGuid + 10000000
-					end
-					
-					while #availableGuids < ActionsPerCycle do
-						table.insert(availableGuids, nextGuid)
-						nextGuid = nextGuid + 1
-					end
-				end
-				
-				if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Found " .. #availableGuids .. " available item GUIDs for next batch") end
-				
-				CharDBQueryAsync("SELECT id, AddedByEluna FROM auctionhouse ORDER BY AddedByEluna DESC", function(result)
-					local availableIds = {}
-					local maxId = 0
-					local usedIds = {}
-					local MaxIdNotAddedByEluna = 0
-					local NotAddedByEluna
-					local isEmpty = true
-				   
-					if result then repeat
-						isEmpty = false  -- If we enter the loop, table is not empty
-						local id = result:GetUInt32(0)
-						local AddedByEluna = result:GetUInt32(1)
-					   
-						usedIds[id] = true
-					   
-						maxId = math.max(maxId, id)
-					   
-						if AddedByEluna == 0 then
-							MaxIdNotAddedByEluna = math.max(MaxIdNotAddedByEluna, id)
-							NotAddedByEluna = true
-						end
-						
-					until not result:NextRow() end
-					
-					if MaxIdNotAddedByEluna == 0 then MaxIdNotAddedByEluna = maxId end
-					
-					if isEmpty then -- If table is empty, start from 10 000 000
-						local nextId = 10000000
-						while #availableIds < ActionsPerCycle do
-							table.insert(availableIds, nextId)
-							nextId = nextId + 1
-						end
-					else
-						local upperBound = NotAddedByEluna and MaxIdNotAddedByEluna or maxId
-						
-						if NotAddedByEluna then -- If there are auctions not added by Eluna in current server session, fill in gaps
-							for i = 1, upperBound do
-								if not usedIds[i] then
-									table.insert(availableIds, i)
-									if #availableIds >= ActionsPerCycle then
-										break
-									end
-								end
-							end
-						else -- If there are only auctions added by Eluna in current server session, continue from highest auction ID
-							local nextId = maxId + 1
-							while #availableIds < ActionsPerCycle do
-								table.insert(availableIds, nextId)
-								nextId = nextId + 1
-							end
-						end
-						
-						-- If we need more IDs, add them above maxId in increments
-						if #availableIds < ActionsPerCycle then
-							local nextId = math.max(MaxIdNotAddedByEluna + 10000000, maxId + 1)
-							while #availableIds < ActionsPerCycle do
-								table.insert(availableIds, nextId)
-								nextId = nextId + 1
-							end
-						end
-					end
-					
-					local itemQueryParts = {}
-					local auctionQueryParts = {}
-					local auctionCount = 0
-					
-					for _, item in ipairs(selectedItems) do
-						if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Processing item "..item.name) end
-						local isAllowed = false
-						if houseId == 7 or item.race == 2147483647 or item.race == -1 then 
-							isAllowed = true
-						elseif houseId == 2 then -- Alliance AH, check if horde race is present in item_template
-							for _, race in ipairs(AllowedAllyRaces) do
-								if (bitAnd(item.race, race) ~= 0) then 
-									isAllowed = true
-									break
-								end
-							end
-						elseif houseId == 6 then -- Horde AH, check if ally race is present in item_template
-							for _, race in ipairs(AllowedHordeRaces) do
-								if (bitAnd(item.race, race) ~= 0) then
-									isAllowed = true
-									break
-								end
-							end
-						end
-
-						if not isAllowed then
-							if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Removing item " .. item.name .. " from queue due to belonging to another faction than auction house ID "..houseId) end
-						else
-							auctionCount = auctionCount + 1
-							lastItemId = availableGuids[1]
-							table.remove(availableGuids, 1)
-							lastAuctionId = availableIds[1]
-							table.remove(availableIds, 1)
-							
-							local randomBot = AHBots[math.random(1, #AHBots)]
-							
-							local cost = ChooseCostFormula(CostFormula, item)
-
-							local expireTime = os.time() + math.random(6 * 3600, 48 * 3600)
-
-							-- Item type price adjustments
-							if RecipePriceAdjustment then if item.class == 9 and not item.name:find("Design:") then cost = cost * RecipePriceAdjustment end end
-							if GemPriceAdjustment then if item.class == 3 then cost = cost * GemPriceAdjustment * (1 + (math.random() * 0.4 - 0.2)) end end
-							if UndervaluedItemAdjust then if cost < 50000 then if ((item.class == 7 and item.entry > 40000) or (item.name:find("VIII"))) and not (item.Quality > 2 or item.entry == 41511) then cost = cost * UndervaluedItemAdjust end end end -- Adjusts certain profession mats and scrolls if very cheap
-							
-							-- If cost calculation aimed too low, adjust with a randomized failsafe amount
-							if not cost or cost < 1000 then cost = math.random(10000, 100000) end
-							
-							if item.class == 4 then
-								if item.ItemLevel > 200 and item.InventoryType == 9 and item.bonding == 2 then if cost < 500000 then cost = cost * 100 end end -- EOV bracers
-							end 
-							
-							if LowPriceFloor then
-								if (((item.class == 15 and item.subclass == 2) or (item.class == 16)) and cost < 200000) then cost = LowPriceFloor * (math.random() * 0.6 + 0.7) end
-							else
-								if UndervaluedItemAdjust then if (((item.class == 15 and item.subclass == 2) or (item.class == 16)) and cost < 200000) then cost = cost * UndervaluedItemAdjust end end
-							end
-							
-							-- Crafted by
-							if item.craftedBy == 1 then item.craftedBy = randomBot end
-							
-							local stack = 1
-							
-							if item.class == 6 then
-								if AlwaysMaxStackAmmo then
-									stack = item.stackable
-								end
-							elseif StackedItemClasses then
-								for _, itemClass in ipairs(StackedItemClasses) do
-									if item.class == itemClass then
-										if item.stackable > 10 then
-											stack = math.ceil(math.random(8, item.stackable))
-										else
-											stack = math.ceil(math.random(1, item.stackable))
-										end
-									end
-								end
-							end
-							
-							cost = cost * stack
-							
-							if SellPriceVariance then
-								cost = cost * math.random(1 - (SellPriceVariance/100), 1 + (SellPriceVariance/100))
-							end
-							
-							if AdjustedAmmoPrices then
-								if item.class == 6 then
-									if item.Quality == 1 then cost = math.random(150,5000) end
-									if item.Quality == 2 then cost = math.random(10000,100000) end
-									if item.Quality == 3 then cost = math.random(100000,150000) end
-									if item.Quality == 4 then cost = math.random(200000,350000) end
-									if item.Quality == 5 then cost = math.random(350000,1000000) end
-								end
-							end
-
-							-- Random stats
-							local randomStats
-							if ApplyRandomProperties then
-								if item.RandomProperty > 0 then randomStats = item.RandomProperty -- Random property start
-								elseif item.RandomSuffix > 0 then randomStats = (item.RandomSuffix) * -1 -- Random suffix start print("Suffixed item found: "..item.entry..". Stored randomStats value: "..randomStats)
-								else randomStats = 0 -- Skip random stats handling
-								end
-							end
-							
-							local enchantString = "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
-							
-							if randomStats > 0 then -- Handle random properties
-								local properties = ItemRandomProperty[randomStats]
-								if properties then
-									local selectedProperty = nil
-									
-									for _, property in ipairs(properties) do -- First attempt to get a property based on chance
-										if math.random(0, 100) <= property.chance then
-											selectedProperty = property
-											break
-										end
-									end
-									
-									if not selectedProperty and #properties > 0 then -- If no property was selected by chance, use the first one
-										selectedProperty = properties[1]
-									end
-									
-									if selectedProperty then -- Apply the selected property
-										local e1, e2, e3 = table.unpack(ItemRandomProperties[selectedProperty.ench])
-										enchantString = "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "..e1.." 0 0 "..e2.." 0 0 "..e3.." 0 0 0 0 0 0 0 0 "
-										randomStats = selectedProperty.ench
-										if AHBotItemDebug then 
-											print("[Eluna AH Bot Item Debug]: Item "..item.entry.." - Enchants for "..selectedProperty.ench..": "..e1..", "..e2..", "..e3) 
-										end
-									end
-								end
-							end
-							
-							if randomStats < 0 then -- Handle random suffixes
-								local suffixOptions = {}
-								local suffixOption
-								
-								-- Caster items, require suffix 
-								if item.InventoryType == 23 or item.InventoryType == 20 -- Held in off hands, robes (cloth chest)
-								or (item.class == 2 and (item.subclass == 10 or item.subclass == 19))
-								or (item.class == 4 and item.subclass == 1) then -- Stamina, spirit, int, spell power, protections etc.
-									suffixOptions = {36, 37, 38, 39, 9, 15, 19, 26, 81, 84, 85, 31, 32, 33, 34, 35}
-									
-								elseif (item.class == 4 and item.subclass == 2) -- Leather and rogue/moonkin
-								or (item.class == 2 and (
-									item.subclass == 2 or item.subclass == 3 or item.subclass == 6 or
-									item.subclass == 13 or item.subclass == 15 or item.subclass == 16 or 
-									item.subclass == 17 or item.subclass == 18)) then -- Stamina, Agility. To-do: Boomie leather gear.
-									suffixOptions = {56, 63, 68, 69, 71, 74, 84, 89, 91, 31, 32, 33, 34, 35}
-									
-								elseif (item.class == 4 and item.subclass == 3) then -- Mail gear, hunter/shaman
-									suffixOptions = {91, 89, 86, 71, 69, 63, 67, 50, 31, 32, 33, 34, 35}
-									
-								elseif item.class == 2 or (item.class == 4 and -- Plate gear, remaining weapons
-									(item.subclass == 4 or item.subclass == 6)) then -- Plate armor and shields
-									suffixOptions = {92, 89, 86, 84, 68, 71, 72, 66, 62, 63, 43, 41, 31, 32, 33, 34, 35}
-								else -- Random stats failsafe
-									suffixOption = math.random(49, 75)
-								end
-								
-								-- Select a random suffix from the available options
-								local selectedSuffix
-								
-								if suffixOption then
-									selectedSuffix = suffixOption
-								else
-									selectedSuffix = suffixOptions[math.random(1, #suffixOptions)]
-								end
-								
-								local e1, e2, e3, e4, e5 = table.unpack(ItemRandomSuffix[selectedSuffix].Enchantment)
-								enchantString = "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 "..e1.." 0 0 "..e2.." 0 0 "..e3.." 0 0 "..e4.." 0 0 "..e5.." 0 0 "
-								randomStats = selectedSuffix * -1
-								if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Item "..item.entry.." - Enchants found for "..selectedSuffix..": "..e1..", "..e2..", "..e3..", "..e4..", "..e5) end
-							end
-							
-							cost = math.floor(cost)
-							
-							local startBid = math.floor(cost * (math.random(51, 90) / 100))
-							-- Add item_instance entry
-							table.insert(itemQueryParts, "(" .. lastItemId .. ", " .. item.entry .. ", " .. randomBot .. ", " .. item.craftedBy .. ", 0, " .. stack .. ", 0, '" ..
-								item.c1 .. " " .. item.c2 .. " " .. item.c3 .. " " .. item.c4 .. " " .. item.c5 .. "', 0, '"..enchantString.."', " ..
-								randomStats .. ", " .. item.durability .. ", "..item.duration..", '')")
-
-							-- Add auction entry
-							table.insert(auctionQueryParts, string.format("(%d, %d, %d, %d, %d, %d, 0, 0, %d, 1, %d)",
-								lastAuctionId, houseId, lastItemId, randomBot, cost, expireTime, startBid, AddedByEluna))
-						end
-					end
-					-- We're nesting our next operations in async queries to ensure they don't overlap and are performed in rapid succession
-					if #itemQueryParts > 0 and #auctionQueryParts > 0 then 
-					
-						local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
-						local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
-						CharDBQueryAsync(itemQuery, function(results) -- Insert items in database first
-							CharDBQueryAsync(auctionQuery, function(results) -- Once item inserts are complete, insert auctions
-								if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - " .. auctionCount .. " auctions added to auction house no. " .. houseId .. ".") end
-								currentHouse = currentHouse - houseId
-								
-								if currentHouse == 0 then
-									if BuyOnStartup then
-										if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, proceeding to initiate buyers...") end
-										AHBot_BuyAuction()
-										SendMessageToGMs("AH bot sellers initiated. Starting buyers...")
-										return
-									end
-									if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") end
-									SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
-									RunCommand("reload auctions") -- Instantiates auctions
-									NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
-									return
-								end
-								if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Scheduling processing of next house ID.") end
-								AddAuctions() -- Schedule next auction house
-							end)
-						end)
-					end
-				end)
-			end)
-		else
-			if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - Action house at capacity (Min auctions: "..MinAuctions..". Current auctions: ".. tostring(auctionCount) .." / " .. MaxAuctions .. "). No action taken, awaiting next cycle on ".. os.date("%H:%M", NextAHBotSellCycle) .. " server time.") end
-			if BuyOnStartup then
-				AHBot_BuyAuction()
-			end
-		end
-	end)
+    local houseId = 0
+    
+    if specificHouse then currentHouse = specificHouse end
+    
+    if currentHouse == 15 or currentHouse == 13 or currentHouse == 9 or currentHouse == 7 then 
+        houseId = 7
+    elseif currentHouse == 8 or currentHouse == 6 then 
+        houseId = 6
+    elseif currentHouse == 2 then 
+        houseId = 2 
+    end
+    
+    if houseId == 0 then return end
+    
+    if AHBotActionDebug then 
+        print("[Eluna AH Bot Debug]: Seller - Processing auctions for house ID: " .. houseId) 
+    end
+    
+    CheckAuctions(houseId, function(auctionCount)
+        ProcessAuctionCheck(auctionCount, houseId)
+    end)
 end
 
 local function AHBot_SellItems(_, _, _, specificHouse)
