@@ -18,92 +18,92 @@ if GetStateMapId() ~= -1 then return end
 -- AH Bot Configs
 -------------------------------------------------------------------------------------------------------------------------
 
-local EnableAHBot			= true			-- Default: True. If false, AH bot is disabled. 
-local AHBots				= {1, 2, 3}		-- Default: 1, 2, 3. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
-local EnabledAuctionHouses	= {2, 6, 7}			-- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
-local AHBotActionDebug		= true			-- Default: False. Enables various action debug prints. Critical prints will still be active even if false.
-local AHBotItemDebug		= false			-- Default: False. Enables debug prints on item handling, cost per item entry, Quality, etc.
-local ActionsPerCycle		= 500			-- Default: 500 (items). The higher the value, the faster the bots fill the AH up to the min auctions limit and the more items they buy, at the expense of performance.
-local StartupDelay 			= 1000			-- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
-local EnableGMMessages		= true			-- Default: True. Messages all online GMs on command and initiation events.
-local AnnounceOnLogin		= true			-- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
+local EnableAHBot           = true           -- Default: True. If false, AH bot is disabled. 
+local AHBots                = {1, 2, 3}      -- Default: 1, 2, 3. Chooses which player GUID lows will be used as AH bots. Must match extant characters. Not faction specific.
+local EnabledAuctionHouses  = {2, 6, 7}      -- Default: 2, 6, 7. Possible values: 2 is ally, 6 is horde, 7 is cross faction (neutral). Multiple values accepted, like {2, 6, 7}. Only 7 is required on cross-faction servers.
+local AHBotActionDebug      = true           -- Default: False. Enables various action debug prints. Critical prints will still be active even if false.
+local AHBotItemDebug        = false          -- Default: False. Enables debug prints on item handling, cost per item entry, Quality, etc.
+local ActionsPerCycle       = 500            -- Default: 500 (items). The higher the value, the faster the bots fill the AH up to the min auctions limit and the more items they buy, at the expense of performance.
+local StartupDelay          = 1000           -- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
+local EnableGMMessages      = true           -- Default: True. Messages all online GMs on command and initiation events.
+local AnnounceOnLogin       = true           -- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Buyer Configs
 -------------------------------------------------------------------------------------------------------------------------
 
-local EnableBuyer			= true			-- Default: True.
-local AHBuyTimer 			= 0.5 			-- Default: 0.5 (hours). How often the AH bot will try to purchase a few items.
-local ItemLevelLimit 		= 187			-- Default: 187. Prevents bots from buying items above this item level, to ensure players get access to those items instead.
-local BotsBuyFromBots		= false			-- Default: False. Prevent bots from buying other bots' items.
-local CostFormula 			= 1     		-- Default: 1. 1 = Quality based scaling, 2 = Entry ID influenced, 3 = Quality/Level focused, 4 = Balanced multi-factor, 5 = Progressive thresholds, 6 = Random (1000-1000000)
-local BotsPriceTolerance	= 1.5			-- Default: 1.5. Factor with which unadjusted CostFormula is multiplied to return how much a bot is willing to pay for an item. 
-local PlaceBidChance		= 20			-- Default: 10 (%). Setting to 0 disables bids. 
-local PlaceBuyoutChance		= 10			-- Default: 5 (%). Settings to 0 disables buyouts.
-local BuyOnStartup			= true			-- Default: True. Buyer bot will start buying auctions immediately on server start, instead of on AHBuyTimer. If false, will still activate on AHBuyTimer. 
-local DisableBidFight		= true			-- Default: True. Don't place bids/buyouts on items that players have already placed bids on
+local EnableBuyer           = true           -- Default: True.
+local AHBuyTimer            = 0.5            -- Default: 0.5 (hours). How often the AH bot will try to purchase a few items.
+local ItemLevelLimit        = 187            -- Default: 187. Prevents bots from buying items above this item level, to ensure players get access to those items instead.
+local BotsBuyFromBots       = false          -- Default: False. Prevent bots from buying other bots' items.
+local CostFormula           = 1              -- Default: 1. 1 = Quality based scaling, 2 = Entry ID influenced, 3 = Quality/Level focused, 4 = Balanced multi-factor, 5 = Progressive thresholds, 6 = Random (1000-1000000)
+local BotsPriceTolerance    = 1.5            -- Default: 1.5. Factor with which unadjusted CostFormula is multiplied to return how much a bot is willing to pay for an item. 
+local PlaceBidChance        = 20             -- Default: 10 (%). Setting to 0 disables bids. 
+local PlaceBuyoutChance     = 10             -- Default: 5 (%). Settings to 0 disables buyouts.
+local BuyOnStartup          = true           -- Default: True. Buyer bot will start buying auctions immediately on server start, instead of on AHBuyTimer. If false, will still activate on AHBuyTimer. 
+local DisableBidFight       = true           -- Default: True. Don't place bids/buyouts on items that players have already placed bids on
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Seller Configs
 -------------------------------------------------------------------------------------------------------------------------
 
-local EnableSeller			= true			-- Default: True.
-local MaxAuctions 			= 10000			-- Default: 5000. Max number of auctions posted by the AH bot.
-local MinAuctions			= 2000	 		-- Default: 2000. Min number of auctions. If under this value, AH will repopulate sales. If over, but less than max, has 30% chance per check to populate AH.
-local RepopulationChance	= 30			-- Default: 30. Percentage chance to partially restock AH if stock is between max and min during a periodical check. Can be overriden to force populate whenever with ".ahbot auctions add". 
-local CostFormula 			= 1 	    	-- Default: 1. 1 = Quality based scaling, 2 = Entry ID influenced, 3 = Quality/Level focused, 4 = Balanced multi-factor, 5 = Progressive thresholds, 6 = Random (1000-1000000)
-local SellPriceVariance		= 20			-- Default: 20. How many % to randomize prices with. 
-local AHSellTimer 			= 5 			-- Default: 5 (hours). How often the AH bot will check whether it needs to put up new auctions, in hours.
-local SellOnStartup			= true			-- Default: True. Used for debugging and instantly populating an empty auction house. If true, fires AH bot on Eluna load (startup / Eluna reloads). If false, activates on AHSellTimer. 
-local ApplyRandomProperties = true			-- Default: True. Adds enchant/random stats and corresponding name to items (e.g., "of the Eagle"). This is DBC-based with Lua tables copied into this script. Disable if non-WotLK core.
-local SetAsCraftedBy		= true			-- Default: True. Marks items created by player spells as created by the AH bot posting the item.
+local EnableSeller          = true          -- Default: True.
+local MaxAuctions           = 10000         -- Default: 5000. Max number of auctions posted by the AH bot.
+local MinAuctions           = 2000          -- Default: 2000. Min number of auctions. If under this value, AH will repopulate sales. If over, but less than max, has 30% chance per check to populate AH.
+local RepopulationChance    = 30            -- Default: 30. Percentage chance to partially restock AH if stock is between max and min during a periodical check. Can be overriden to force populate whenever with ".ahbot auctions add". 
+local CostFormula           = 1             -- Default: 1. 1 = Quality based scaling, 2 = Entry ID influenced, 3 = Quality/Level focused, 4 = Balanced multi-factor, 5 = Progressive thresholds, 6 = Random (1000-1000000)
+local SellPriceVariance     = 20            -- Default: 20. How many % to randomize prices with. 
+local AHSellTimer           = 5             -- Default: 5 (hours). How often the AH bot will check whether it needs to put up new auctions, in hours.
+local SellOnStartup         = true          -- Default: True. Used for debugging and instantly populating an empty auction house. If true, fires AH bot on Eluna load (startup / Eluna reloads). If false, activates on AHSellTimer. 
+local ApplyRandomProperties = true          -- Default: True. Adds enchant/random stats and corresponding name to items (e.g., "of the Eagle"). This is DBC-based with Lua tables copied into this script. Disable if non-WotLK core.
+local SetAsCraftedBy        = true          -- Default: True. Marks items created by player spells as created by the AH bot posting the item.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Item Seller Filter Configs
 -------------------------------------------------------------------------------------------------------------------------
 
 -- General Item Filters
-local Expansion				= 0									-- Default: 0 (no expansion lock). Possible values: 0 (no expansion lock), 1 (Vanilla, patch 1.12), 2 (TBC, patch 2.4.3), 3 (WotLK, patch 3.3.5a). Any expansion filter makes bots includes all items in the item_template database table per expansion.
-local EnableItemFilters		= true								-- Default: True. Disable only for debugging.
-local AllowDeprecated 		= false								-- Default: False. Items with flag 16 (Deprecated) or name like NPC, zzOLD, etc. will not be sold.
-local AllowedBinds 			= {0, 2, 3} 						-- Default: 0, 2, 3. 0 = no bounds, 1 = Bind on Pickup, 2 = Bind on Equip, 3 = Bind on Use, 4-5 Quest Items (see also AllowQuestItems to control quest item sales).
-local AllowBindOnAccount	= false								-- Default: False. Decides whether BoA items (e.g., hierlooms) can be sold by the AH bot.
-local AllowedQualities		= {1, 2, 3, 4}						-- Default: 1, 2, 3, 4. 0 = Gray/Poor, 1 = White/Common, 2 = Green/Uncommon, 3 = Blue/Rare, 4 = Purple/Epic, 5 = Orange/Legendary, 6 = Red/Artifact, 7 = Gold/Heirloom.
-local AllowQuestItems		= false								-- Default: False.
-local AllowConsumables		= true								-- Default: True. Toggles selling consumables (potions, elixirs, etc.).
-local MinContainerSize		= 16								-- Default: 16. Don't allow selling containers (including quivers, bags, etc.) under specified size.
-local MinLevelConsumables	= 50								-- Default: 50. Prevents the AH bot from flooding the market with low level junk.
-local MinLevelGear			= 10								-- Default: 10. Prevents the AH bot from flooding the market with low level junk and unobtainable starter items.
-local MaxLevel				= 80								-- Default: 80. The AH bot will not sell any item with a level limit exceeding this value.
-local StackedItemClasses	= {0, 5, 6, 7}						-- Default: 0, 5, 6, 7. Sells stacks between 50-100% of max stack size. Possible values: 0 (Consumable), 1 (Container), 2 (Weapon), 3 (Gem), 4 (Armor), 5 (Reagent), 6 (Projectile), 7 (Trade Goods), 9 (Recipe), 11 (Quiver), 12 (Quest), 13 (Key) 15 (Miscellaneous), 16 (Glyph).
-local AlwaysMaxStackAmmo	= true								-- Default: True. If true, always sells ammo in stacks of 1000.
-local AdjustedAmmoPrices 	= true								-- Default: True. Ammo price variables are inconsistent. This adjusts ammunition prices to realistic in-game prices. For example, Iceblade Arrows are set to between 20g-35g per stack.
-local AllowCommonAmmo		= false								-- Defualt: False. Common ammo is just dead weight.
-local AllowReputationItems 	= false								-- Default: False.
-local AllowMounts			= false								-- Default: False. If true, the X-51 rocket has a tendency to show up.
-local AllowCompanions		= true								-- Default: True. 
+local Expansion              = 0                   -- Default: 0 (no expansion lock). Possible values: 0 (no expansion lock), 1 (Vanilla, patch 1.12), 2 (TBC, patch 2.4.3), 3 (WotLK, patch 3.3.5a). Any expansion filter makes bots includes all items in the item_template database table per expansion.
+local EnableItemFilters      = true                -- Default: True. Disable only for debugging.
+local AllowDeprecated        = false               -- Default: False. Items with flag 16 (Deprecated) or name like NPC, zzOLD, etc. will not be sold.
+local AllowedBinds           = {0, 2, 3}           -- Default: 0, 2, 3. 0 = no bounds, 1 = Bind on Pickup, 2 = Bind on Equip, 3 = Bind on Use, 4-5 Quest Items (see also AllowQuestItems to control quest item sales).
+local AllowBindOnAccount     = false               -- Default: False. Decides whether BoA items (e.g., hierlooms) can be sold by the AH bot.
+local AllowedQualities       = {1, 2, 3, 4}        -- Default: 1, 2, 3, 4. 0 = Gray/Poor, 1 = White/Common, 2 = Green/Uncommon, 3 = Blue/Rare, 4 = Purple/Epic, 5 = Orange/Legendary, 6 = Red/Artifact, 7 = Gold/Heirloom.
+local AllowQuestItems        = false               -- Default: False.
+local AllowConsumables       = true                -- Default: True. Toggles selling consumables (potions, elixirs, etc.).
+local MinContainerSize       = 16                  -- Default: 16. Don't allow selling containers (including quivers, bags, etc.) under specified size.
+local MinLevelConsumables    = 50                  -- Default: 50. Prevents the AH bot from flooding the market with low level junk.
+local MinLevelGear           = 10                  -- Default: 10. Prevents the AH bot from flooding the market with low level junk and unobtainable starter items.
+local MaxLevel               = 80                  -- Default: 80. The AH bot will not sell any item with a level limit exceeding this value.
+local StackedItemClasses     = {0, 5, 6, 7}        -- Default: 0, 5, 6, 7. Sells stacks between 50-100% of max stack size. Possible values: 0 (Consumable), 1 (Container), 2 (Weapon), 3 (Gem), 4 (Armor), 5 (Reagent), 6 (Projectile), 7 (Trade Goods), 9 (Recipe), 11 (Quiver), 12 (Quest), 13 (Key) 15 (Miscellaneous), 16 (Glyph).
+local AlwaysMaxStackAmmo     = true                -- Default: True. If true, always sells ammo in stacks of 1000.
+local AdjustedAmmoPrices     = true                -- Default: True. Ammo price variables are inconsistent. This adjusts ammunition prices to realistic in-game prices. For example, Iceblade Arrows are set to between 20g-35g per stack.
+local AllowCommonAmmo        = false               -- Defualt: False. Common ammo is just dead weight.
+local AllowReputationItems   = false               -- Default: False.
+local AllowMounts            = false               -- Default: False. If true, the X-51 rocket has a tendency to show up.
+local AllowCompanions        = true                -- Default: True. 
 
 -- Character and Race Filters
-local AllowedClassItems		= {-1} 									-- Default: -1. Possible values: -1 (Items with no class restrictions), 1 (Warrior), 2 (Paladin), 3 (Hunter), 4 (Rogue), 5 (Priest), 6 (DK), 7 (Shaman), 9 (Warlock), 11 (Druid). Table accepts multiple values, such as {-1, 1, 2, 3}.
-local AllowedAllyRaces		= {-1, 1, 4, 8, 64, 1024, 2147483647}	-- Default: -1, 1, 4, 8, 64, 1024, 2147483647 (All races and all raceless items). Possible values: 1 (Human), 2 (Orc), 4 (Dwarf), 8 (Night Elf), 16 (Undead), 32 (Tauren), 64 (Gnome), 128 (Troll), 512 (Blood Elf), 1024 (Draenei), -1 and 2147483647 (all races).
-local AllowedHordeRaces		= {-1, 2, 16, 32, 128, 512, 2147483647}	-- Default: -1, 2, 16, 32, 128, 512, 2147483647 (All races and all raceless items). Possible values: 1 (Human), 2 (Orc), 4 (Dwarf), 8 (Night Elf), 16 (Undead), 32 (Tauren), 64 (Gnome), 128 (Troll), 512 (Blood Elf), 1024 (Draenei), -1 and 2147483647 (all races).
+local AllowedClassItems        = {-1}                                  -- Default: -1. Possible values: -1 (Items with no class restrictions), 1 (Warrior), 2 (Paladin), 3 (Hunter), 4 (Rogue), 5 (Priest), 6 (DK), 7 (Shaman), 9 (Warlock), 11 (Druid). Table accepts multiple values, such as {-1, 1, 2, 3}.
+local AllowedAllyRaces         = {-1, 1, 4, 8, 64, 1024, 2147483647}   -- Default: -1, 1, 4, 8, 64, 1024, 2147483647 (All races and all raceless items). Possible values: 1 (Human), 2 (Orc), 4 (Dwarf), 8 (Night Elf), 16 (Undead), 32 (Tauren), 64 (Gnome), 128 (Troll), 512 (Blood Elf), 1024 (Draenei), -1 and 2147483647 (all races).
+local AllowedHordeRaces        = {-1, 2, 16, 32, 128, 512, 2147483647} -- Default: -1, 2, 16, 32, 128, 512, 2147483647 (All races and all raceless items). Possible values: 1 (Human), 2 (Orc), 4 (Dwarf), 8 (Night Elf), 16 (Undead), 32 (Tauren), 64 (Gnome), 128 (Troll), 512 (Blood Elf), 1024 (Draenei), -1 and 2147483647 (all races).
 
 -- Profession Filters
-local AllowedProfessions 	= {8, 16, 32, 64, 128, 512, 1024} 	-- Default: 8, 16, 32, 64, 128, 512, 1024. Possible values: 8 (Leatherworking Supplies), 16 (Inscription Supplies), 32 (Herbs), 64 (Enchanting Supplies), 128 (Engineering Supplies), 512 (Gems), 1024 (Mining Supplies).
-local AllowLockpicking		= true								-- Default: True. Toggles lockboxes, etc.
-local AllowGlyphs			= true								-- Default: True. Toggles selling glyphs.
-local AllowRecipes			= true								-- Default: True. Toggles profession recipes.
-local RecipePriceAdjustment = 10								-- Default: 10. Factor to increase recipe prices by. These are usually low in price because their associated variables are low. Set to false to disable.
-local GemPriceAdjustment	= 0.142								-- Default: 1/7. Factor to decrease gem prices by. These are usually high in price because their associated variables are high. Set to false to disable.
-local UndervaluedItemAdjust	= 5									-- Default: 5. Vellums, Titanium materials, VIII scrolls etc. are usually somewhat undervalued. Set to false to disable.
-local LowPriceFloor			= 200000							-- Default: 200000 (20g). Price floor for certain items where multipliers don't work well. Companions, glyphs, etc. Randomized +- 30% around this base cost. If nil, defaults to UndervaluedItemAdjust.
+local AllowedProfessions    = {8, 16, 32, 64, 128, 512, 1024}  -- Default: 8, 16, 32, 64, 128, 512, 1024. Possible values: 8 (Leatherworking Supplies), 16 (Inscription Supplies), 32 (Herbs), 64 (Enchanting Supplies), 128 (Engineering Supplies), 512 (Gems), 1024 (Mining Supplies).
+local AllowLockpicking      = true                             -- Default: True. Toggles lockboxes, etc.
+local AllowGlyphs           = true                             -- Default: True. Toggles selling glyphs.
+local AllowRecipes          = true                             -- Default: True. Toggles profession recipes.
+local RecipePriceAdjustment = 10                               -- Default: 10. Factor to increase recipe prices by. These are usually low in price because their associated variables are low. Set to false to disable.
+local GemPriceAdjustment    = 0.142                            -- Default: 1/7. Factor to decrease gem prices by. These are usually high in price because their associated variables are high. Set to false to disable.
+local UndervaluedItemAdjust = 5                                -- Default: 5. Vellums, Titanium materials, VIII scrolls etc. are usually somewhat undervalued. Set to false to disable.
+local LowPriceFloor         = 200000                           -- Default: 200000 (20g). Price floor for certain items where multipliers don't work well. Companions, glyphs, etc. Randomized +- 30% around this base cost. If nil, defaults to UndervaluedItemAdjust.
 
 -- Misc Config
-local AllowKeys				= false								-- Default: False.
-local AllowMisc				= false								-- Default: False. If enabled, allows Soul Shards, Currency Tokens and "Misc Other" items (item_template class 15, subclass 4).
-local AllowJunk				= true								-- Default: True. Toggles junk, such as fishing boxes.
-local AllowHolidayItems		= false								-- Default: False. Toggles holiday/seasonal items.
-local AllowConjured			= false								-- Default: False. Toggles conjured items like mage strudels.
+local AllowKeys                = false                           -- Default: False.
+local AllowMisc                = false                           -- Default: False. If enabled, allows Soul Shards, Currency Tokens and "Misc Other" items (item_template class 15, subclass 4).
+local AllowJunk                = true                            -- Default: True. Toggles junk, such as fishing boxes.
+local AllowHolidayItems        = false                           -- Default: False. Toggles holiday/seasonal items.
+local AllowConjured            = false                           -- Default: False. Toggles conjured items like mage strudels.
 
 -- Seller Item Weights
 -- The weight is always relative to the total set and number of items in the category.
@@ -112,54 +112,54 @@ local AllowConjured			= false								-- Default: False. Toggles conjured items l
 -- Increasing one value will supplant the value of the other values.
 local ItemWeights = {
     Gear = {
-        ["Gray/Poor"] 			= 0,
-        ["White/Common"] 		= 0.1,
-        ["Green/Uncommon"] 		= 25,
-        ["Blue/Rare"]			= 15,
-        ["Purple/Epic"] 		= 5,
-        ["Orange/Legendary"] 	= 0,
-        ["Red/Artifact"] 		= 0,
-        ["Gold/Heirloom"]		= 0
+        ["Gray/Poor"]            = 0,
+        ["White/Common"]         = 0.1,
+        ["Green/Uncommon"]       = 25,
+        ["Blue/Rare"]            = 15,
+        ["Purple/Epic"]          = 5,
+        ["Orange/Legendary"]     = 0,
+        ["Red/Artifact"]         = 0,
+        ["Gold/Heirloom"]        = 0
     },
     Mats = {
-        ["Gray/Poor"] 			= 0,
-        ["White/Common"] 		= 2,
-        ["Green/Uncommon"] 		= 30,
-        ["Blue/Rare"] 			= 10,
-        ["Purple/Epic"] 		= 1,
-        ["Orange/Legendary"] 	= 0,
-        ["Red/Artifact"] 		= 0,
-        ["Gold/Heirloom"]		= 0
+        ["Gray/Poor"]            = 0,
+        ["White/Common"]         = 2,
+        ["Green/Uncommon"]       = 30,
+        ["Blue/Rare"]            = 10,
+        ["Purple/Epic"]          = 1,
+        ["Orange/Legendary"]     = 0,
+        ["Red/Artifact"]         = 0,
+        ["Gold/Heirloom"]        = 0
     },
     Glyph = 10,
     Projectile = 5,
     Other = 20,
     SpecificItems = {
-		-- Example items to include that the auction house bots will weigh as separate categories.
-		-- Adding weights per item ID here can, for example, ensure that they are always sold by the AH in a desired (relative) quantity.
-		-- Example below: Frostweave Bag
-		-- [41599] = 2, -- Frostweave Bag
-		-- Add more items with the following structure:
-		-- [Item ID] = Weight,
-	},
+        -- Example items to include that the auction house bots will weigh as separate categories.
+        -- Adding weights per item ID here can, for example, ensure that they are always sold by the AH in a desired (relative) quantity.
+        -- Example below: Frostweave Bag
+        -- [41599] = 2, -- Frostweave Bag
+        -- Add more items with the following structure:
+        -- [Item ID] = Weight,
+    },
 }
 
 -- Customizable item ID exclusion filters
-local NeverSellIDs			= {									-- Default: Various items not intended for AH sale. Append list by adding new "<item_entry>," rows. 
-							   52252, -- Lightbringer Tabard	-- Additions here append to the SQL "NAME NOT" list. 
-							   44663, -- Adventurer's Satchel
-							   54822, -- Sen'Jin's Overcloak
-							   37201, -- Corpse Dust
-							   17195, -- Fake Mistletoe
-							   44432, -- China Glyph of Raise Dead??
-							    4439, -- Wooden Stock, vendor trash
-							   40533, -- Electrified blade, unobtainable item
-							   30418, -- Unused polearm
-							   -- Deprecated Classic mounts
-							   1041, 1133, 1134, 2413, 2415, 5663, 5874, 5875, 
-							   8583, 8589, 8590, 8627, 8628, 8630, 8633, 14062,
-							   -- Add more item IDs if needed
-							   }
+local NeverSellIDs            = {                               -- Default: Various items not intended for AH sale. Append list by adding new "<item_entry>," rows. 
+                               52252, -- Lightbringer Tabard    -- Additions here append to the SQL "NAME NOT" list. 
+                               44663, -- Adventurer's Satchel
+                               54822, -- Sen'Jin's Overcloak
+                               37201, -- Corpse Dust
+                               17195, -- Fake Mistletoe
+                               44432, -- China Glyph of Raise Dead??
+                                4439, -- Wooden Stock, vendor trash
+                               40533, -- Electrified blade, unobtainable item
+                               30418, -- Unused polearm
+                               -- Deprecated Classic mounts
+                               1041, 1133, 1134, 2413, 2415, 5663, 5874, 5875, 
+                               8583, 8589, 8590, 8627, 8628, 8630, 8633, 14062,
+                               -- Add more item IDs if needed
+                               }
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Do not edit below this line unless you know what you're doing
@@ -199,15 +199,15 @@ end
 TagElunaAuctions()
 RegisterServerEvent(14, TagElunaAuctions)
 
-local itemCache = {}										-- Stores all entries from the item_template for further processing
-local NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60-- Used in print and cmd feedback
-local NextAHBotBuyCycle	= os.time() + AHBuyTimer * 60 * 60 	-- Used in print and cmd feedback 
-local AHBotSellEventId										-- Used to track if running, for cmd etc
-local AHBotBuyEventId										-- Used to track if the indefinite Lua event for the AH bot is running, to not schedule another on top through the cmd system
-local botList = table.concat(AHBots, ",") 					-- Converts table to a string for SQL and concat interaction
-local houseList = table.concat(EnabledAuctionHouses, ",")	-- Converts table to a string for SQL and concat interaction
-local postedAuctions = {} 									-- Counts how many auctions have been posted by the auction bots last. Used in info cmd
-local EnchantmentModule = require("EnchantmentModule")	    -- For random item properties
+local itemCache = {}                                          -- Stores all entries from the item_template for further processing
+local NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60  -- Used in print and cmd feedback
+local NextAHBotBuyCycle    = os.time() + AHBuyTimer * 60 * 60 -- Used in print and cmd feedback 
+local AHBotSellEventId                                        -- Used to track if running, for cmd etc
+local AHBotBuyEventId                                         -- Used to track if the indefinite Lua event for the AH bot is running, to not schedule another on top through the cmd system
+local botList = table.concat(AHBots, ",")                     -- Converts table to a string for SQL and concat interaction
+local houseList = table.concat(EnabledAuctionHouses, ",")     -- Converts table to a string for SQL and concat interaction
+local postedAuctions = {}                                     -- Counts how many auctions have been posted by the auction bots last. Used in info cmd
+local EnchantmentModule = require("EnchantmentModule")        -- For random item properties
 require("AHBot_Helpers")
 
 -- Early returns and MySQL error failsafes
@@ -219,13 +219,13 @@ if not ActionsPerCycle or type(ActionsPerCycle) ~= "number" then print("[Eluna A
 function SendMessageToGMs(message)
     for _, player in pairs(GetPlayersInWorld()) do
         if player:GetGMRank() > 0 then
-			if not EnableGMMessages then
-				if tonumber(message) ~= nil then RemoveEventById(message) end -- If GM messages are off, remove any events in the GM message handler (identified by msg var being number)
-				return
-			end
-			if tonumber(message) ~= nil then player:SendBroadcastMessage("|cFFFF0000 [Eluna AH Bot GM]: Fatal error - No valid bots configured! |r")
-			else player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: "..message)
-			end
+            if not EnableGMMessages then
+                if tonumber(message) ~= nil then RemoveEventById(message) end -- If GM messages are off, remove any events in the GM message handler (identified by msg var being number)
+                return
+            end
+            if tonumber(message) ~= nil then player:SendBroadcastMessage("|cFFFF0000 [Eluna AH Bot GM]: Fatal error - No valid bots configured! |r")
+            else player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: "..message)
+            end
         end
     end
 end
@@ -239,14 +239,14 @@ local function queryBotCharacters() -- Verifies bots' existence
     repeat
         table.insert(validGUIDs, result:GetUInt32(0))
     until not result:NextRow()
-	
+    
     if #validGUIDs < #AHBots then
         print("[Eluna AH Bot]: Error in selected bot list "..botList..", bot(s) not found! Defaulting to "..table.concat(validGUIDs, ",")..".")
-		SendMessageToGMs("Error in bot list "..botList.."! Defaulting to "..table.concat(validGUIDs, ",")..".")
+        SendMessageToGMs("Error in bot list "..botList.."! Defaulting to "..table.concat(validGUIDs, ",")..".")
         AHBots = validGUIDs
-		botList = table.concat(AHBots, ",")
+        botList = table.concat(AHBots, ",")
     end
-	print("[Eluna AH Bot]: AH bot module loaded. Type '.ahbot' in game to manage, set cache settings, and display statistics.")
+    print("[Eluna AH Bot]: AH bot module loaded. Type '.ahbot' in game to manage, set cache settings, and display statistics.")
 end
 
 queryBotCharacters()
@@ -270,144 +270,144 @@ local ItemTemplateQuery = [[
            InventoryType, AllowableClass, ItemLevel, RequiredLevel,
            RequiredSkill, RequiredSkillRank, stackable, startquest,
            bonding, BagFamily, flags, name, MaxDurability, ContainerSlots,
-		   RandomProperty, spellcharges_1, spellcharges_2, spellcharges_3,
-		   spellcharges_4, spellcharges_5, duration, AllowableRace,
-		   RandomSuffix
+           RandomProperty, spellcharges_1, spellcharges_2, spellcharges_3,
+           spellcharges_4, spellcharges_5, duration, AllowableRace,
+           RandomSuffix
     FROM item_template
 ]]
 
 if EnableItemFilters then
-	local conditions = {} -- We must use a table to store conditions to ensure we're not overwriting "where" statements, in case any of the filter conditions are empty
+    local conditions = {} -- We must use a table to store conditions to ensure we're not overwriting "where" statements, in case any of the filter conditions are empty
 
-	if Expansion then
-		local expansionData = {
-			[1] = {items = ItemsVanilla, maxEntry = 24284},
-			[2] = {items = ItemsTBC, maxEntry = 39657},
-			[3] = {items = ItemsWotLK, maxEntry = 56807}
-		}
-		local exp = expansionData[Expansion]
-		if exp then
-			table.insert(conditions, "entry NOT IN (" .. table.concat(exp.items, ',') .. ") AND entry < " .. exp.maxEntry)
-		end
-	end
-	
-	-- Simple exclusions
-	if NeverSellIDs then
-		table.insert(conditions, "NOT entry IN (" .. table.concat(NeverSellIDs, ',') .. ")")
-	end
-	
-	-- Container size filter
-	if MinContainerSize then
-		table.insert(conditions, "NOT ((class = 1 OR class = 11) AND ContainerSlots < "..MinContainerSize..")")
-	end
-	
-	-- Class restrictions
-	if AllowedClassItems then
-		local classFilter = AllowGlyphs and "(class = 16 OR AllowableClass IN (" or "AllowableClass IN ("
-		table.insert(conditions, classFilter .. table.concat(AllowedClassItems, ',') .. "))")
-	end
-	
-	-- Race restrictions
-	for _, raceGroup in ipairs({{AllowedHordeRaces}, {AllowedAllyRaces}}) do
-		if raceGroup[1] then
-			table.insert(conditions, "AllowableRace IN (" .. table.concat(raceGroup[1], ',') .. ")")
-		end
-	end
-	
-	-- Boolean filters with class/subclass/flag checks
-	local booleanFilters = {
-		{not AllowRecipes, "NOT (class = 9)"},
-		{not AllowCompanions, "NOT (class = 15 and subclass = 2)"},
-		{not AllowMounts, "NOT (class = 15 and subclass = 5)"},
-		{not AllowReputationItems, "RequiredReputationFaction = 0"},
-		{not AllowKeys, {"(BagFamily & 256) = 0", "NOT (class = 13 and subclass = 0)"}},
-		{not AllowConjured, "(flags & 2) = 0"},
-		{not AllowMisc, {"(BagFamily & 4) = 0", "(BagFamily & 2048) = 0", "NOT (class = 15 and subclass = 4)"}},
-		{not AllowQuestItems, {"(BagFamily & 16384) = 0", "NOT class = 12"}},
-		{not AllowLockpicking, "NOT (class = 13 and subclass = 1)"},
-		{not AllowConsumables, "NOT (class = 0)"},
-		{not AllowCommonAmmo, "NOT (class = 6 and quality < 2)"},
-		{not AllowHolidayItems, {"NOT (class = 15 and subclass = 3)", "HolidayId = 0"}},
-		{not AllowBindOnAccount, "(flags & 134217728) = 0"}
-	}
-	
-	for _, filter in ipairs(booleanFilters) do
-		if filter[1] then
-			if type(filter[2]) == "table" then
-				for _, condition in ipairs(filter[2]) do
-					table.insert(conditions, condition)
-				end
-			else
-				table.insert(conditions, filter[2])
-			end
-		end
-	end
-	
-	-- Quality and binding filters
-	if AllowedBinds then
-		table.insert(conditions, "bonding IN (" .. table.concat(AllowedBinds, ',') .. ")")
-	end
-	if AllowedQualities then
-		table.insert(conditions, "quality IN (" .. table.concat(AllowedQualities, ',') .. ")")
-	end
-	
-	-- Level filters
-	if MaxLevel then
-		table.insert(conditions, "RequiredLevel <= ".. MaxLevel)
-	end
-	if MinLevelConsumables then
-		table.insert(conditions, "NOT (class = 0 AND RequiredLevel < " .. MinLevelConsumables .. ")")
-	end
-	if MinLevelGear then
-		table.insert(conditions, "NOT ((class = 4 OR class = 2) AND RequiredLevel < " .. MinLevelGear .. ")")
-	end
-	
-	-- Deprecated items filter
-	if not AllowDeprecated then
-		table.insert(conditions, "(flags & 16) = 0")
-		table.insert(conditions, "NOT (class = 8 and subclass = 0)")
-		table.insert(conditions, "NOT (class = 10 and subclass = 0)")
-		table.insert(conditions, "NOT ((class = 11 and subclass = 0) OR (class = 11 and subclass = 1))")
-		
-		-- Consolidated name exclusions
-		local nameExclusions = {
-			"'%OLD%'", "'%NPC%'", "'%QA%'", "'%enchant ring%'", "'%tablet%'", "'%throwing dagger%'",
-			"'%shot pouch%'", "'%brimstone%'", "'%small pouch%'", "'%stormjewel%'", "'%dye%'",
-			"'%feathers of azeroth%'", "'%broken%throwing%'", "'%northrend meat%'", "'%ironwood seed%'",
-			"'%stranglethorn seed%'", "'%simple wood%'", "'%small sack of coins%'", "'%slimy bag%'",
-			"'%bleach%'", "'%oozing bag%'", "'%Pale Skinner%'", "'%Pioneer Buckler%'", "'%locust wing%'",
-			"'%community token%'", "'%thick citrine%'", "'%brilliant citrine%'", "'%nightbloom lilac%'",
-			"'%flour%'", "'%brew%'", "'%[PH]%'", "'%(PH)%'", "'%fishing -%'", "'%Sandy Scorpid Claw%'",
-			"'% caster %'", "'%Jeweler''s Kit%'", "'%nightmare berries%'", "'%parchment%'",
-			"'%light quiver%'", "'%honey%'", "'%explosive shell%'", "'%envelope%'", "'%equipment kit%'",
-			"'%/%'", "'%2.0%'", "'%creeping anguish%'", "'%felcloth bag%'", "'%elementium ore%'",
-			"'%unused%'", "'%lava core%'", "'%fiery core%'", "'%sulfuron ingot%'", "'%sak%'",
-			"'%gigantique%'", "'%portable hole%'", "'%deptecated%'", "'%durability%'", "'%big sack%'",
-			"'%decoded%'", "'%knowledge:%'", "'%manual%'", "'%gnome head%'", "'%box of%'",
-			"'%Light Feather%'", "'%Pet Stone%'", "'%Ogrela%'", "'%cache of%'", "'%summoning%'",
-			"'%cut %'", "'%turtle egg%'", "'%jillian%'", "'%heavy crate%'", "'%plain letter%'",
-			"'%sack of gems%'", "'%plans: darkspear%'", "'%beetle husk%'", "'%froststeel bar%'",
-			"'%firefly dust%'", "'%of swords%'", "'%gnomish alarm%'", "'%tome%'", "'%ornate spyglass%'",
-			"'%test%'", "'%darkmoon prize%'", "'%frostmourne%'", "'%codex%'", "'%the fall of ameth%'",
-			"'%frostwolf artichoke%'", "'%symbol of kings%'", "'%symbol of divinity%'", "'%word of thawing%'",
-			"'%grimoire%'", "'%deprecated%'", "'%cowardly flight%'", "'%book%'", "'%libram%'",
-			"'%brazie''s%'", "'%guide%'", "'%glyphed breastplate%'", "'%weak flux%'", "'%leatherworking%'",
-			"'%walnut stock%'", "'%virtuoso inking%'", "'%dictionary%'", "'%moonlit katana%'",
-			"'%Omar%'", "'%depleted%'", "'%bottomless inscription bag%'", "'%90 Epic%'", "'%90 Blue%'",
-			"'%90 Green%'", "'%blood shard%'", "'%dampscale basilisk eye%'", "'%evil bat eye%'",
-			"'%package%'", "'%signet of beckoning%'", "'%silithid carapace%'", "'%smoke beacon%'",
-			"'%shadoweave belt%'", "'%snickerfang jowl%'", "'%mojo%'", "'%singed%'"
-		}
-		
-		table.insert(conditions, "UPPER(NAME) NOT LIKE " .. table.concat(nameExclusions, " AND UPPER(NAME) NOT LIKE "))
-		table.insert(conditions, "NAME NOT LIKE '% Crate %' AND NAME NOT LIKE 'Crate %' AND NAME NOT LIKE '% Crate'")
-		table.insert(conditions, "NOT (CLASS = 15 AND NAME LIKE '%throw%')")
-		table.insert(conditions, "NOT (NAME LIKE '%broken%' AND NAME LIKE '%throwing%')")
-	end
+    if Expansion then
+        local expansionData = {
+            [1] = {items = ItemsVanilla, maxEntry = 24284},
+            [2] = {items = ItemsTBC, maxEntry = 39657},
+            [3] = {items = ItemsWotLK, maxEntry = 56807}
+        }
+        local exp = expansionData[Expansion]
+        if exp then
+            table.insert(conditions, "entry NOT IN (" .. table.concat(exp.items, ',') .. ") AND entry < " .. exp.maxEntry)
+        end
+    end
+    
+    -- Simple exclusions
+    if NeverSellIDs then
+        table.insert(conditions, "NOT entry IN (" .. table.concat(NeverSellIDs, ',') .. ")")
+    end
+    
+    -- Container size filter
+    if MinContainerSize then
+        table.insert(conditions, "NOT ((class = 1 OR class = 11) AND ContainerSlots < "..MinContainerSize..")")
+    end
+    
+    -- Class restrictions
+    if AllowedClassItems then
+        local classFilter = AllowGlyphs and "(class = 16 OR AllowableClass IN (" or "AllowableClass IN ("
+        table.insert(conditions, classFilter .. table.concat(AllowedClassItems, ',') .. "))")
+    end
+    
+    -- Race restrictions
+    for _, raceGroup in ipairs({{AllowedHordeRaces}, {AllowedAllyRaces}}) do
+        if raceGroup[1] then
+            table.insert(conditions, "AllowableRace IN (" .. table.concat(raceGroup[1], ',') .. ")")
+        end
+    end
+    
+    -- Boolean filters with class/subclass/flag checks
+    local booleanFilters = {
+        {not AllowRecipes, "NOT (class = 9)"},
+        {not AllowCompanions, "NOT (class = 15 and subclass = 2)"},
+        {not AllowMounts, "NOT (class = 15 and subclass = 5)"},
+        {not AllowReputationItems, "RequiredReputationFaction = 0"},
+        {not AllowKeys, {"(BagFamily & 256) = 0", "NOT (class = 13 and subclass = 0)"}},
+        {not AllowConjured, "(flags & 2) = 0"},
+        {not AllowMisc, {"(BagFamily & 4) = 0", "(BagFamily & 2048) = 0", "NOT (class = 15 and subclass = 4)"}},
+        {not AllowQuestItems, {"(BagFamily & 16384) = 0", "NOT class = 12"}},
+        {not AllowLockpicking, "NOT (class = 13 and subclass = 1)"},
+        {not AllowConsumables, "NOT (class = 0)"},
+        {not AllowCommonAmmo, "NOT (class = 6 and quality < 2)"},
+        {not AllowHolidayItems, {"NOT (class = 15 and subclass = 3)", "HolidayId = 0"}},
+        {not AllowBindOnAccount, "(flags & 134217728) = 0"}
+    }
+    
+    for _, filter in ipairs(booleanFilters) do
+        if filter[1] then
+            if type(filter[2]) == "table" then
+                for _, condition in ipairs(filter[2]) do
+                    table.insert(conditions, condition)
+                end
+            else
+                table.insert(conditions, filter[2])
+            end
+        end
+    end
+    
+    -- Quality and binding filters
+    if AllowedBinds then
+        table.insert(conditions, "bonding IN (" .. table.concat(AllowedBinds, ',') .. ")")
+    end
+    if AllowedQualities then
+        table.insert(conditions, "quality IN (" .. table.concat(AllowedQualities, ',') .. ")")
+    end
+    
+    -- Level filters
+    if MaxLevel then
+        table.insert(conditions, "RequiredLevel <= ".. MaxLevel)
+    end
+    if MinLevelConsumables then
+        table.insert(conditions, "NOT (class = 0 AND RequiredLevel < " .. MinLevelConsumables .. ")")
+    end
+    if MinLevelGear then
+        table.insert(conditions, "NOT ((class = 4 OR class = 2) AND RequiredLevel < " .. MinLevelGear .. ")")
+    end
+    
+    -- Deprecated items filter
+    if not AllowDeprecated then
+        table.insert(conditions, "(flags & 16) = 0")
+        table.insert(conditions, "NOT (class = 8 and subclass = 0)")
+        table.insert(conditions, "NOT (class = 10 and subclass = 0)")
+        table.insert(conditions, "NOT ((class = 11 and subclass = 0) OR (class = 11 and subclass = 1))")
+        
+        -- Consolidated name exclusions
+        local nameExclusions = {
+            "'%OLD%'", "'%NPC%'", "'%QA%'", "'%enchant ring%'", "'%tablet%'", "'%throwing dagger%'",
+            "'%shot pouch%'", "'%brimstone%'", "'%small pouch%'", "'%stormjewel%'", "'%dye%'",
+            "'%feathers of azeroth%'", "'%broken%throwing%'", "'%northrend meat%'", "'%ironwood seed%'",
+            "'%stranglethorn seed%'", "'%simple wood%'", "'%small sack of coins%'", "'%slimy bag%'",
+            "'%bleach%'", "'%oozing bag%'", "'%Pale Skinner%'", "'%Pioneer Buckler%'", "'%locust wing%'",
+            "'%community token%'", "'%thick citrine%'", "'%brilliant citrine%'", "'%nightbloom lilac%'",
+            "'%flour%'", "'%brew%'", "'%[PH]%'", "'%(PH)%'", "'%fishing -%'", "'%Sandy Scorpid Claw%'",
+            "'% caster %'", "'%Jeweler''s Kit%'", "'%nightmare berries%'", "'%parchment%'",
+            "'%light quiver%'", "'%honey%'", "'%explosive shell%'", "'%envelope%'", "'%equipment kit%'",
+            "'%/%'", "'%2.0%'", "'%creeping anguish%'", "'%felcloth bag%'", "'%elementium ore%'",
+            "'%unused%'", "'%lava core%'", "'%fiery core%'", "'%sulfuron ingot%'", "'%sak%'",
+            "'%gigantique%'", "'%portable hole%'", "'%deptecated%'", "'%durability%'", "'%big sack%'",
+            "'%decoded%'", "'%knowledge:%'", "'%manual%'", "'%gnome head%'", "'%box of%'",
+            "'%Light Feather%'", "'%Pet Stone%'", "'%Ogrela%'", "'%cache of%'", "'%summoning%'",
+            "'%cut %'", "'%turtle egg%'", "'%jillian%'", "'%heavy crate%'", "'%plain letter%'",
+            "'%sack of gems%'", "'%plans: darkspear%'", "'%beetle husk%'", "'%froststeel bar%'",
+            "'%firefly dust%'", "'%of swords%'", "'%gnomish alarm%'", "'%tome%'", "'%ornate spyglass%'",
+            "'%test%'", "'%darkmoon prize%'", "'%frostmourne%'", "'%codex%'", "'%the fall of ameth%'",
+            "'%frostwolf artichoke%'", "'%symbol of kings%'", "'%symbol of divinity%'", "'%word of thawing%'",
+            "'%grimoire%'", "'%deprecated%'", "'%cowardly flight%'", "'%book%'", "'%libram%'",
+            "'%brazie''s%'", "'%guide%'", "'%glyphed breastplate%'", "'%weak flux%'", "'%leatherworking%'",
+            "'%walnut stock%'", "'%virtuoso inking%'", "'%dictionary%'", "'%moonlit katana%'",
+            "'%Omar%'", "'%depleted%'", "'%bottomless inscription bag%'", "'%90 Epic%'", "'%90 Blue%'",
+            "'%90 Green%'", "'%blood shard%'", "'%dampscale basilisk eye%'", "'%evil bat eye%'",
+            "'%package%'", "'%signet of beckoning%'", "'%silithid carapace%'", "'%smoke beacon%'",
+            "'%shadoweave belt%'", "'%snickerfang jowl%'", "'%mojo%'", "'%singed%'"
+        }
+        
+        table.insert(conditions, "UPPER(NAME) NOT LIKE " .. table.concat(nameExclusions, " AND UPPER(NAME) NOT LIKE "))
+        table.insert(conditions, "NAME NOT LIKE '% Crate %' AND NAME NOT LIKE 'Crate %' AND NAME NOT LIKE '% Crate'")
+        table.insert(conditions, "NOT (CLASS = 15 AND NAME LIKE '%throw%')")
+        table.insert(conditions, "NOT (NAME LIKE '%broken%' AND NAME LIKE '%throwing%')")
+    end
 
-	if #conditions > 0 then
-		ItemTemplateQuery = ItemTemplateQuery .. " WHERE " .. table.concat(conditions, " AND ")
-	end
+    if #conditions > 0 then
+        ItemTemplateQuery = ItemTemplateQuery .. " WHERE " .. table.concat(conditions, " AND ")
+    end
 end
 
 local function CheckAuctions(houseId, callback)
@@ -528,7 +528,7 @@ function ChooseCostFormula(formulaNum, item)
     local p if item.BuyPrice == 0 then if item.ItemLevel > 150 then p = item.ItemLevel/30 else p = 1 end elseif item.class == 2 then p = item.BuyPrice * 0.4 else p = item.BuyPrice * 0.8 end
     local s if item.SellPrice == 0 then if item.ItemLevel > 150 then s = item.ItemLevel/30 else s = 1 end elseif item.class == 2 then s = item.SellPrice * 0.4 else s = item.SellPrice * 0.8 end
     local l if item.ItemLevel == 0 then l = 1 elseif item.ItemLevel > 226 then l = item.ItemLevel * 2.5 else l = item.ItemLevel end
-							
+                            
     if AHBotItemDebug then
         print("- Quality (q) type:", type(q), "Value:", q)
         print("- BuyPrice (p) type:", type(p), "Value:", p)
@@ -536,7 +536,7 @@ function ChooseCostFormula(formulaNum, item)
         print("- ItemLevel (l) type:", type(l), "Value:", l)
         print("- Entry type:", type(item.entry), "Value:", item.entry)
     end
-	
+    
     -- Choose formula based on input
     if formulaNum == 1 then
         local price = (q / 3 * p / 10 * l * 1.2)
@@ -546,8 +546,8 @@ function ChooseCostFormula(formulaNum, item)
             local variance = 2000000 * 0.05
             price = 2000000 + math.random(-variance, variance)
         elseif item.entry == 50182 then -- Blood Queen's Choker should probably be more expensive than other BoEs
-			price = price * 3
-		end
+            price = price * 3
+        end
         
         return price
     elseif formulaNum == 2 then
@@ -930,42 +930,42 @@ local function ProcessItemCreation(selectedItems, houseId, availableGuids, avail
     end
     
     if #itemQueryParts > 0 and #auctionQueryParts > 0 then
-		local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
-		local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
-		
-		CharDBQueryAsync(itemQuery, function(results) -- Instantiate items in database
-			CharDBQueryAsync(auctionQuery, function(results) -- Add auctions to database
-				if AHBotActionDebug then 
-					print("[Eluna AH Bot Debug]: Seller - " .. auctionCount .. " auctions added to auction house no. " .. houseId .. ".") 
-				end
-				
-				currentHouse = currentHouse - houseId
-				
-				if currentHouse == 0 then
-					if BuyOnStartup then
-						if AHBotActionDebug then 
-							print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, proceeding to initiate buyers...") 
-						end
-						AHBot_BuyAuction()
-						SendMessageToGMs("AH bot sellers initiated. Starting buyers...")
-						return
-					end
-					
-					if AHBotActionDebug then 
-						print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") 
-					end
-					SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
-					RunCommand("reload auctions")
-					NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
-					return
-				end
-				
-				if AHBotActionDebug then 
-					print("[Eluna AH Bot Debug]: Seller - Scheduling processing of next house ID.") 
-				end
-				AddAuctions() -- Check if more auctions are scheduled in other auction houses
-			end)
-		end)
+        local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
+        local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
+        
+        CharDBQueryAsync(itemQuery, function(results) -- Instantiate items in database
+            CharDBQueryAsync(auctionQuery, function(results) -- Add auctions to database
+                if AHBotActionDebug then 
+                    print("[Eluna AH Bot Debug]: Seller - " .. auctionCount .. " auctions added to auction house no. " .. houseId .. ".") 
+                end
+                
+                currentHouse = currentHouse - houseId
+                
+                if currentHouse == 0 then
+                    if BuyOnStartup then
+                        if AHBotActionDebug then 
+                            print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, proceeding to initiate buyers...") 
+                        end
+                        AHBot_BuyAuction()
+                        SendMessageToGMs("AH bot sellers initiated. Starting buyers...")
+                        return
+                    end
+                    
+                    if AHBotActionDebug then 
+                        print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") 
+                    end
+                    SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
+                    RunCommand("reload auctions")
+                    NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
+                    return
+                end
+                
+                if AHBotActionDebug then 
+                    print("[Eluna AH Bot Debug]: Seller - Scheduling processing of next house ID.") 
+                end
+                AddAuctions() -- Check if more auctions are scheduled in other auction houses
+            end)
+        end)
     end
 end
 
@@ -1137,15 +1137,15 @@ function AddAuctions(specificHouse)
 end
 
 local function AHBot_SellItems(_, _, _, specificHouse)
-	if not specificHouse then
-		currentHouse = 0
-		for _, houseId in ipairs(EnabledAuctionHouses) do
-			currentHouse = currentHouse + houseId
-		end
-	else
-		currentHouse = specificHouse
-	end
-	AddAuctions(specificHouse)
+    if not specificHouse then
+        currentHouse = 0
+        for _, houseId in ipairs(EnabledAuctionHouses) do
+            currentHouse = currentHouse + houseId
+        end
+    else
+        currentHouse = specificHouse
+    end
+    AddAuctions(specificHouse)
 end
 
 ---------------------------------------------------------------------------------
@@ -1155,108 +1155,108 @@ end
 local ItemTemplateSize = 0
 
 CreateLuaEvent(function()
-	WorldDBQueryAsync(ItemTemplateQuery, function(results)
-		if AHBotActionDebug then print("[Eluna AH Bot]: Core - Caching item_template.") end
-		if results then
-			repeat
-				local entry = results:GetUInt32(0)
-				itemCache[entry] = {
-					entry = entry,
-					class = results:GetUInt32(1),
-					subclass = results:GetUInt32(2),
-					Quality = results:GetUInt32(3),
-					BuyPrice = results:GetUInt32(4),
-					SellPrice = results:GetUInt32(5),
-					InventoryType = results:GetUInt32(6),
-					AllowableClass = results:GetInt32(7),
-					ItemLevel = results:GetUInt32(8),
-					RequiredLevel = results:GetUInt32(9),
-					RequiredSkill = results:GetUInt32(10),
-					RequiredSkillRank = results:GetUInt32(11),
-					stackable = results:GetUInt32(12),
-					startquest = results:GetUInt32(13),
-					bonding = results:GetUInt32(14),
-					BagFamily = results:GetUInt32(15),
-					flags = results:GetUInt32(16),
-					name = results:GetString(17),
-					durability = results:GetUInt32(18),
-					ContainerSlots = results:GetUInt32(19),
-					RandomProperty = results:GetInt32(20),
-					c1 = results:GetInt32(21),
-					c2 = results:GetInt32(22),
-					c3 = results:GetInt32(23),
-					c4 = results:GetInt32(24),
-					c5 = results:GetInt32(25),
-					duration = results:GetUInt32(26),
-					race = results:GetInt32(27),
-					RandomSuffix = results:GetInt32(28),
-					craftedBy = 0
-				}
-				ItemTemplateSize = ItemTemplateSize + 1
-			until not results:NextRow()
-			if AHBotActionDebug then print("[Eluna AH Bot]: Core - Finished caching item_template. Valid items: "..ItemTemplateSize..".") end
-			
-			if SetAsCraftedBy then -- Split out of the query to not delay db ops
-				for entry, item in pairs(itemCache) do
-					for _, craftedItem in ipairs(craftedItems) do
-						if entry == craftedItem then
-							item.craftedBy = 1
-							break
-						end
-					end
-				end
-			end
-			
-			if EnableSeller then
-				WorldDBQueryAsync("SELECT * FROM item_enchantment_template", function(results)
-					if results then
-						-- Initialize the ItemRandomProperty table if it doesn't exist
-						ItemRandomProperty = ItemRandomProperty or {}
-						
-						repeat
-							local entry = results:GetUInt32(0)
-							local ench = results:GetUInt32(1)
-							local chance = results:GetFloat(2)
-							-- Initialize the entry table only once
-							if not ItemRandomProperty[entry] then
-								ItemRandomProperty[entry] = {}
-							end
-							
-							-- Add the new enchantment data
-							table.insert(ItemRandomProperty[entry], {
-								ench = ench,
-								chance = chance
-							})
-						until not results:NextRow()
-						
-						if AHBotActionDebug then 
-							print("[Eluna AH Bot Debug]: Seller - Finished caching item_enchantment_template.") 
-						end
-						
-						if SellOnStartup then
-							AHBot_SellItems()
-						end
-					end
-				end)
-			end
-		end
-	end)
+    WorldDBQueryAsync(ItemTemplateQuery, function(results)
+        if AHBotActionDebug then print("[Eluna AH Bot]: Core - Caching item_template.") end
+        if results then
+            repeat
+                local entry = results:GetUInt32(0)
+                itemCache[entry] = {
+                    entry = entry,
+                    class = results:GetUInt32(1),
+                    subclass = results:GetUInt32(2),
+                    Quality = results:GetUInt32(3),
+                    BuyPrice = results:GetUInt32(4),
+                    SellPrice = results:GetUInt32(5),
+                    InventoryType = results:GetUInt32(6),
+                    AllowableClass = results:GetInt32(7),
+                    ItemLevel = results:GetUInt32(8),
+                    RequiredLevel = results:GetUInt32(9),
+                    RequiredSkill = results:GetUInt32(10),
+                    RequiredSkillRank = results:GetUInt32(11),
+                    stackable = results:GetUInt32(12),
+                    startquest = results:GetUInt32(13),
+                    bonding = results:GetUInt32(14),
+                    BagFamily = results:GetUInt32(15),
+                    flags = results:GetUInt32(16),
+                    name = results:GetString(17),
+                    durability = results:GetUInt32(18),
+                    ContainerSlots = results:GetUInt32(19),
+                    RandomProperty = results:GetInt32(20),
+                    c1 = results:GetInt32(21),
+                    c2 = results:GetInt32(22),
+                    c3 = results:GetInt32(23),
+                    c4 = results:GetInt32(24),
+                    c5 = results:GetInt32(25),
+                    duration = results:GetUInt32(26),
+                    race = results:GetInt32(27),
+                    RandomSuffix = results:GetInt32(28),
+                    craftedBy = 0
+                }
+                ItemTemplateSize = ItemTemplateSize + 1
+            until not results:NextRow()
+            if AHBotActionDebug then print("[Eluna AH Bot]: Core - Finished caching item_template. Valid items: "..ItemTemplateSize..".") end
+            
+            if SetAsCraftedBy then -- Split out of the query to not delay db ops
+                for entry, item in pairs(itemCache) do
+                    for _, craftedItem in ipairs(craftedItems) do
+                        if entry == craftedItem then
+                            item.craftedBy = 1
+                            break
+                        end
+                    end
+                end
+            end
+            
+            if EnableSeller then
+                WorldDBQueryAsync("SELECT * FROM item_enchantment_template", function(results)
+                    if results then
+                        -- Initialize the ItemRandomProperty table if it doesn't exist
+                        ItemRandomProperty = ItemRandomProperty or {}
+                        
+                        repeat
+                            local entry = results:GetUInt32(0)
+                            local ench = results:GetUInt32(1)
+                            local chance = results:GetFloat(2)
+                            -- Initialize the entry table only once
+                            if not ItemRandomProperty[entry] then
+                                ItemRandomProperty[entry] = {}
+                            end
+                            
+                            -- Add the new enchantment data
+                            table.insert(ItemRandomProperty[entry], {
+                                ench = ench,
+                                chance = chance
+                            })
+                        until not results:NextRow()
+                        
+                        if AHBotActionDebug then 
+                            print("[Eluna AH Bot Debug]: Seller - Finished caching item_enchantment_template.") 
+                        end
+                        
+                        if SellOnStartup then
+                            AHBot_SellItems()
+                        end
+                    end
+                end)
+            end
+        end
+    end)
 end, StartupDelay + 100) -- The core may crash if we get MySQL locked from other scripts querying database on load/reload Eluna. Adding slight delay in case StartupDelay is 0.
 
 if EnableSeller then
-	AHBotSellEventId = CreateLuaEvent(AHBot_SellItems, AHSellTimer * 60 * 60 * 1000, 0)
-	NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
-	if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - AH Bot seller system initialized. Actions scheduled on every " .. AHSellTimer .. " hour(s).") end
+    AHBotSellEventId = CreateLuaEvent(AHBot_SellItems, AHSellTimer * 60 * 60 * 1000, 0)
+    NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
+    if AHBotActionDebug then print("[Eluna AH Bot Debug]: Seller - AH Bot seller system initialized. Actions scheduled on every " .. AHSellTimer .. " hour(s).") end
 end
 
 if EnableBuyer then
-	for _, entry in ipairs(EnabledAuctionHouses) do
-		AHBotBuyEventId = CreateLuaEvent(AHBot_BuyAuction, AHBuyTimer * 65 * 60 * 1000, 0) -- 5 minutes after seller bots to not cause overlapping lag
-		if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - AH Bot buyer system initialized. Actions scheduled on every " .. AHBuyTimer .. " hour(s).") end
-	end
-	if BuyOnStartup and not SellOnStartup then -- The seller will initiate buyers once done, if both are enabled, so here we must check is not SellOnStartup to not start overlapping buyers
-		CreateLuaEvent(AHBot_BuyAuction, StartupDelay + 1000) -- Slight artificial delay in case StartupDelay is 0.
-	end
+    for _, entry in ipairs(EnabledAuctionHouses) do
+        AHBotBuyEventId = CreateLuaEvent(AHBot_BuyAuction, AHBuyTimer * 65 * 60 * 1000, 0) -- 5 minutes after seller bots to not cause overlapping lag
+        if AHBotActionDebug then print("[Eluna AH Bot Debug]: Buyer - AH Bot buyer system initialized. Actions scheduled on every " .. AHBuyTimer .. " hour(s).") end
+    end
+    if BuyOnStartup and not SellOnStartup then -- The seller will initiate buyers once done, if both are enabled, so here we must check is not SellOnStartup to not start overlapping buyers
+        CreateLuaEvent(AHBot_BuyAuction, StartupDelay + 1000) -- Slight artificial delay in case StartupDelay is 0.
+    end
 end
 
 ---------------------------------------------------------------------------------
@@ -1266,15 +1266,15 @@ end
 local blockCommands = os.time() + 15 -- Prevents expiring auctions while initially starting AH bot
 
 local function CheckExpiry(houseId)
-	blockCommands = os.time() + 300 -- Block expirations for 5 minutes. If the core hasn't expired auctions by now, something is wrong
+    blockCommands = os.time() + 300 -- Block expirations for 5 minutes. If the core hasn't expired auctions by now, something is wrong
     CreateLuaEvent(function(eventId)
-		if blockCommands < os.time() then
-			print("[Eluna AH Bot]: Error expiring auctions " .. (houseId and " in house ID " .. houseId or "") .. ".")
-			SendMessageToGMs("Error expiring auctions" .. (houseId and " in house ID " .. houseId or "") .. "!")
-			RemoveEventById(eventId)
-			blockCommands = 0
-		end
-		
+        if blockCommands < os.time() then
+            print("[Eluna AH Bot]: Error expiring auctions " .. (houseId and " in house ID " .. houseId or "") .. ".")
+            SendMessageToGMs("Error expiring auctions" .. (houseId and " in house ID " .. houseId or "") .. "!")
+            RemoveEventById(eventId)
+            blockCommands = 0
+        end
+        
         local query = "SELECT 1 FROM auctionhouse WHERE itemowner IN (" .. botList .. ")"
         
         if houseId then
@@ -1286,245 +1286,245 @@ local function CheckExpiry(houseId)
                 print("[Eluna AH Bot]: All bot auctions" .. (houseId and " in house ID " .. houseId or "") .. " have expired.")
                 SendMessageToGMs("All bot auctions" .. (houseId and " in house ID " .. houseId or "") .. " have been expired.")
                 RemoveEventById(eventId)
-				blockCommands = 0
+                blockCommands = 0
             end
         end)
     end, 5000, 0)
 end
 
 local function AHBot_Cmd(event, player, command)
-	if not player then return end
-	if command:find("ah") then
-		if player:GetGMRank() < 1 then
-			player:SendBroadcastMessage("You don't have access to this command.")
-			return false
-		end
-	end
-	
-	if blockCommands > os.time() then
-		if command:find("ahbot auctions expire") or command:find("ahbot auctions add") or command:find("ahbot auctions buy") or command:find("ahbot start") then
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: This command cannot be used while auctions are being refreshed.")
-			return false
-		end
-	end
-	
-	local name = player:GetName()
-	if command:lower() == "ahbot" or command == "ahbot options" or command == "ahbot help" then
-		player:SendBroadcastMessage(" ")
-		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Welcome to the Eluna AH bot menu. Possible subcommands:")
-		player:SendBroadcastMessage("|- .ahbot info: Displays statistics about the auction house bot.")
-		player:SendBroadcastMessage("|- .ahbot auctions expire <auction_house_ID/all>: Expires all auctions per house (2/6/7) or all houses.")
-		player:SendBroadcastMessage("|- .ahbot auctions add: Force adds a batch of ".. ActionsPerCycle .." auctions to all auction houses.")
-		player:SendBroadcastMessage("|- .ahbot auctions buy: Force buys a random batch of auctions from all auction houses.")
-		player:SendBroadcastMessage("|- .ahbot stop: Removes the scheduled auction bot events.")
-		player:SendBroadcastMessage("|- .ahbot start: Starts the auction bot, if stopped.")
-		player:SendBroadcastMessage("|- .ahbot pause <hours>: Pauses the auction bot for the specified number of hours.")
-		player:SendBroadcastMessage("|- .ahbot set batchsize <number>: Changes how many items the auction bots processes per cycle.")
-		player:SendBroadcastMessage("|- .ahbot set buycycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
-		player:SendBroadcastMessage("|- .ahbot set sellcycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
-		return false
-		
-	elseif command:lower() == "ahbot info" then
-		local auctionInfo = {}
-		for houseId, count in pairs(postedAuctions) do
-			if count and not (count == "0") then
-				table.insert(auctionInfo, string.format("House ID: %d -> Auctions: %s", houseId, count))
-			end
-		end
-		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: ---------- INFO ----------")
-		player:SendBroadcastMessage("|- Auction house IDs with active bots (2 = ally, 6 = horde, 7 = neutral): ".. houseList)
-		player:SendBroadcastMessage("|- Active bot GUID lows: ".. botList)
-		player:SendBroadcastMessage("|- Min bot auctions: "..MinAuctions..". Max bot auctions: "..MaxAuctions..".")
-		player:SendBroadcastMessage("|- Number of possible items in auction house pool: ".. ItemTemplateSize)
-		player:SendBroadcastMessage("|- Bot items on auction houses on last cycle: "..(table.concat(auctionInfo, ", ")))
-		player:SendBroadcastMessage("|- Next auction house bot sell cycle (hours:minutes): ".. os.date("%H:%M", NextAHBotSellCycle))
-		player:SendBroadcastMessage("|- Next auction house bot buy cycle: in " .. math.ceil((NextAHBotBuyCycle - os.time()) / 60) .. " minutes")
-		local status
-		if AHBotSellEventId then status = "Online" else status = "Offline" end
-		player:SendBroadcastMessage("|- Status auction house bot seller service: "..status)
-		if AHBotBuyEventId then status = "Online" else status = "Offline" end
-		player:SendBroadcastMessage("|- Status auction house bot buyer service: "..status)
-		return false
-		
-	elseif command:lower() == "ahbot auctions expire" or command == "ahbot auctions expire all" then
-		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ")", function(query)
-			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set all bot auctions to expire on next auction update. Refreshing auctions cache...")
-			RunCommand("reload auctions")
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired all auction houses' bot auctions.")	
-			CheckExpiry()
-		end)
-		return false
-	elseif command:lower() == "ahbot auctions expire 2" then
-		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 2", function(query)
-			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 2 to expire on next auction update. Refreshing auctions cache...")
-			RunCommand("reload auctions")
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 2.")	
-			CheckExpiry(2)
-		end)
-		return false
-	elseif command:lower() == "ahbot auctions expire 6" then
-		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 6", function(query)
-			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 6 to expire on next auction update. Refreshing auctions cache...")
-			RunCommand("reload auctions")
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 6.")	
-			CheckExpiry(6)
-		end)
-		return false
-	elseif command:lower() == "ahbot auctions expire 7" then
-		CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 7", function(query)
-			local player = GetPlayerByName(name)
-			SendMessageToGMs("GM "..name.." has set bot auctions on house ID 7 to expire on next auction update. Refreshing auctions cache...")
-			RunCommand("reload auctions") -- Instantiates auctions
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 7.")
-			CheckExpiry(7)
-		end)
-		return false
-	
-	elseif command:lower() == "ahbot auctions buy" then
-		AHBot_BuyAuction()
-		SendMessageToGMs("GM "..name.." is force buying " .. ActionsPerCycle .. " auctions from all auction houses.")
-		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force bought auctions on all auction houses.")
-		return false
-		
-	elseif command:lower() == "ahbot auctions add" or command == "ahbot auctions add all" or command == "ahbot auction add all" or command == "auctions add all" or command == "auction add all" then
-		local overrideHouse = 0
-		for _, houseId in ipairs(EnabledAuctionHouses) do
-			overrideHouse = overrideHouse + houseId
-		end
-		if overrideHouse > 1 then
-			AHBot_SellItems(_, _, _, overrideHouse)
-			SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house(s) ".. houseList)
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on all auction houses: ".. houseList)
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. No auction houses enabled in AH bot config.")
-		end
-		return false
-	elseif command:lower():find("ahbot auctions add (%d+)") then
-		local _, _, houseId = command:lower():find("ahbot auctions add (%d+)")
-		if houseId then
-			houseId = tonumber(houseId)
-			if houseId == 2 or houseId == 6 or houseId == 7 then
-				local houseEnabled = false
-				for _, enabledId in ipairs(EnabledAuctionHouses) do
-					if enabledId == houseId then
-						houseEnabled = true
-						AHBot_SellItems(_, _, _, houseId)
-						SendMessageToGMs("GM "..player:GetName().." has force added " .. ActionsPerCycle .. " auctions to auction house ID "..houseId..".")
-						print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on auction house "..houseId..".")
-						break
-					end
-				end
-				if not houseEnabled then
-					player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Auction house not found or disabled in AH bot config.")
-				end
-			else
-				player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Auction house not found or disabled in AH bot config.")
-			end
-		end
-		return false
-		
-	elseif command:lower() == "ahbot stop" then
-		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Please use either '.ahbot stop sell' or '.ahbot stop buy'.")
-		return false
-	elseif command:lower() == "ahbot stop sell" then
-		RemoveEventById(AHBotSellEventId)
-		AHBotSellEventId = nil
-		NextAHBotSellCycle = nil
-		SendMessageToGMs("GM "..name.." has force stopped the auction house seller on all auction houses.")
-		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just stopped the auction bot seller.")
-		return false
-	elseif command:lower() == "ahbot stop buy" then
-		RemoveEventById(AHBotBuyEventId)
-		AHBotBuyEventId = nil
-		NextAHBotBuyCycle = nil
-		SendMessageToGMs("GM "..name.." has force stopped the auction house buyer on all auction houses.")
-		print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just stopped the auction bot buyer.")
-		return false
-		
-	elseif command:lower() == "ahbot pause" then
-		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid pause time! Please specify a duration between 1 to 24 hours.")
-		return false
-	elseif command:find("ahbot pause ") then
-		local _, _, pauseTime = command:find("ahbot pause (%d+)")
-		if pauseTime and tonumber(pauseTime) >= 1 and tonumber(pauseTime) <= 24 then
-			pauseTime = tonumber(pauseTime)
-			RemoveEventById(AHBotSellEventId)
-			RemoveEventById(AHBotBuyEventId)
-			AHBotBuyEventId = CreateLuaEvent(AHBot_BuyAuction, AHBuyTimer * pauseTime * 65 * 60 * 1000, 0)
-			AHBotSellEventId = CreateLuaEvent(AHBot_SellItems, AHSellTimer * pauseTime * 60 * 60 * 1000, 0)
-			NextAHBotSellCycle = os.time() + pauseTime * 60 * 60
-			SendMessageToGMs("GM "..name.." has paused all auction house bots for "..pauseTime.." hours.")
-			print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." just paused the auction bot for " .. pauseTime .. " hours.")
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid pause time! Please specify a number between 1 and 24.")
-		end
-		return false
-		
-	elseif command:find("ahbot set batchsize ") then
-		local batchsize = tonumber(command:match("ahbot%s+set%s+batchsize%s+(%d+)"))
-		if batchsize and tonumber(batchsize) >= 1 and tonumber(batchsize) <= MaxAuctions then
-			batchsize = tonumber(batchsize)
-			ActionsPerCycle = batchsize
-			SendMessageToGMs("GM "..name.." has set the auction house bots' batch size to "..batchsize..".")
-			print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." just changed the auction bot's batch size to "..batchsize..".")
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid batch size! Please specify a number between 1 and "..MaxAuctions..".")
-		end
-		return false
-		
-	elseif command:find("ahbot set sellcycle ") then
-		local hours = tonumber(command:match("ahbot%s+set%s+sellcycle%s+(%d+)"))
-		if hours and tonumber(hours) >= 1 and tonumber(hours) <= 48 then
-			hours = tonumber(hours)
-			AHSellTimer = hours
-			SendMessageToGMs("GM "..name.." has set the auction house bot's sell cycle time has been set to "..hours.." hours. Next cycle is in "..hours.." hour(s) from now.")
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just changed the auction bot's sell cycle time to "..hours.." hour(s).")
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid sell cycle time! Please specify a number between 1 and 48.")
-		end
-		return false
-	elseif command:find("ahbot set buycycle ") then
-		local hours = tonumber(command:match("ahbot%s+set%s+buycycle%s+([%d%.]+)"))
-		if hours and hours >= 0.1 and hours <= 48 then
-			AHBuyTimer = hours
-			SendMessageToGMs("GM "..name.." has set the auction house bot's buy cycle time has been set to %.1f minutes. Next cycle is in %.1f minutes from now.", 60 * hours, 60 * hours)
-			print(string.format("[Eluna AH Bot]: GM %d just changed the auction bot's buy cycle time to %.1f minutes.", player:GetGUIDLow(), 60 * hours))
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid buy cycle time! Please specify a number between 0.1 and 48.")
-		end
-		return false
-			
-	elseif command:lower() == "ahbot start" then
-		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Incorrect syntax. Use either '.ahbot start sell' or '.ahbot start buy'.")
-		return false
-	elseif command:lower() == "ahbot start buy" then
-		if not AHBotBuyEventId then
-			AHBotBuyEventId = CreateLuaEvent(AHBot_BuyAuction, AHBuyTimer * 65 * 60 * 1000, 0)
-			NextAHBotBuyCycle = os.time() + AHBuyTimer * 60 * 60
-			SendMessageToGMs("GM "..name.." has just started the auction house buyer bot.")
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just started the auction bot buyer.")
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Auction house buyer has already been started. No action taken.")
-		end
-		return false
-	elseif command:lower() == "ahbot start sell" then
-		if not AHBotSellEventId then
-			AHBotSellEventId = CreateLuaEvent(AHBot_SellItems, AHSellTimer * 60 * 60 * 1000, 0)
-			NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
-			SendMessageToGMs("GM "..name.." has just started the auction house seller bot.")
-			print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just started the auction bot seller.")
-		else
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Auction house seller has already been started. No action taken.")
-		end
-		return false
-	
-	elseif command:find("ahbot.+") then
-		player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Type .ahbot to see available commands.")
-		return false
-	end
+    if not player then return end
+    if command:find("ah") then
+        if player:GetGMRank() < 1 then
+            player:SendBroadcastMessage("You don't have access to this command.")
+            return false
+        end
+    end
+    
+    if blockCommands > os.time() then
+        if command:find("ahbot auctions expire") or command:find("ahbot auctions add") or command:find("ahbot auctions buy") or command:find("ahbot start") then
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: This command cannot be used while auctions are being refreshed.")
+            return false
+        end
+    end
+    
+    local name = player:GetName()
+    if command:lower() == "ahbot" or command == "ahbot options" or command == "ahbot help" then
+        player:SendBroadcastMessage(" ")
+        player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Welcome to the Eluna AH bot menu. Possible subcommands:")
+        player:SendBroadcastMessage("|- .ahbot info: Displays statistics about the auction house bot.")
+        player:SendBroadcastMessage("|- .ahbot auctions expire <auction_house_ID/all>: Expires all auctions per house (2/6/7) or all houses.")
+        player:SendBroadcastMessage("|- .ahbot auctions add: Force adds a batch of ".. ActionsPerCycle .." auctions to all auction houses.")
+        player:SendBroadcastMessage("|- .ahbot auctions buy: Force buys a random batch of auctions from all auction houses.")
+        player:SendBroadcastMessage("|- .ahbot stop: Removes the scheduled auction bot events.")
+        player:SendBroadcastMessage("|- .ahbot start: Starts the auction bot, if stopped.")
+        player:SendBroadcastMessage("|- .ahbot pause <hours>: Pauses the auction bot for the specified number of hours.")
+        player:SendBroadcastMessage("|- .ahbot set batchsize <number>: Changes how many items the auction bots processes per cycle.")
+        player:SendBroadcastMessage("|- .ahbot set buycycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
+        player:SendBroadcastMessage("|- .ahbot set sellcycle <hours>: Changes how often the auction house bot checks the auction house to take action.")
+        return false
+        
+    elseif command:lower() == "ahbot info" then
+        local auctionInfo = {}
+        for houseId, count in pairs(postedAuctions) do
+            if count and not (count == "0") then
+                table.insert(auctionInfo, string.format("House ID: %d -> Auctions: %s", houseId, count))
+            end
+        end
+        player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: ---------- INFO ----------")
+        player:SendBroadcastMessage("|- Auction house IDs with active bots (2 = ally, 6 = horde, 7 = neutral): ".. houseList)
+        player:SendBroadcastMessage("|- Active bot GUID lows: ".. botList)
+        player:SendBroadcastMessage("|- Min bot auctions: "..MinAuctions..". Max bot auctions: "..MaxAuctions..".")
+        player:SendBroadcastMessage("|- Number of possible items in auction house pool: ".. ItemTemplateSize)
+        player:SendBroadcastMessage("|- Bot items on auction houses on last cycle: "..(table.concat(auctionInfo, ", ")))
+        player:SendBroadcastMessage("|- Next auction house bot sell cycle (hours:minutes): ".. os.date("%H:%M", NextAHBotSellCycle))
+        player:SendBroadcastMessage("|- Next auction house bot buy cycle: in " .. math.ceil((NextAHBotBuyCycle - os.time()) / 60) .. " minutes")
+        local status
+        if AHBotSellEventId then status = "Online" else status = "Offline" end
+        player:SendBroadcastMessage("|- Status auction house bot seller service: "..status)
+        if AHBotBuyEventId then status = "Online" else status = "Offline" end
+        player:SendBroadcastMessage("|- Status auction house bot buyer service: "..status)
+        return false
+        
+    elseif command:lower() == "ahbot auctions expire" or command == "ahbot auctions expire all" then
+        CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ")", function(query)
+            local player = GetPlayerByName(name)
+            SendMessageToGMs("GM "..name.." has set all bot auctions to expire on next auction update. Refreshing auctions cache...")
+            RunCommand("reload auctions")
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired all auction houses' bot auctions.")    
+            CheckExpiry()
+        end)
+        return false
+    elseif command:lower() == "ahbot auctions expire 2" then
+        CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 2", function(query)
+            local player = GetPlayerByName(name)
+            SendMessageToGMs("GM "..name.." has set bot auctions on house ID 2 to expire on next auction update. Refreshing auctions cache...")
+            RunCommand("reload auctions")
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 2.")    
+            CheckExpiry(2)
+        end)
+        return false
+    elseif command:lower() == "ahbot auctions expire 6" then
+        CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 6", function(query)
+            local player = GetPlayerByName(name)
+            SendMessageToGMs("GM "..name.." has set bot auctions on house ID 6 to expire on next auction update. Refreshing auctions cache...")
+            RunCommand("reload auctions")
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 6.")    
+            CheckExpiry(6)
+        end)
+        return false
+    elseif command:lower() == "ahbot auctions expire 7" then
+        CharDBQueryAsync("UPDATE auctionhouse SET time = 1 WHERE itemowner IN (" .. botList .. ") AND houseid = 7", function(query)
+            local player = GetPlayerByName(name)
+            SendMessageToGMs("GM "..name.." has set bot auctions on house ID 7 to expire on next auction update. Refreshing auctions cache...")
+            RunCommand("reload auctions") -- Instantiates auctions
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." expired bot auctions on auction house 7.")
+            CheckExpiry(7)
+        end)
+        return false
+    
+    elseif command:lower() == "ahbot auctions buy" then
+        AHBot_BuyAuction()
+        SendMessageToGMs("GM "..name.." is force buying " .. ActionsPerCycle .. " auctions from all auction houses.")
+        print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force bought auctions on all auction houses.")
+        return false
+        
+    elseif command:lower() == "ahbot auctions add" or command == "ahbot auctions add all" or command == "ahbot auction add all" or command == "auctions add all" or command == "auction add all" then
+        local overrideHouse = 0
+        for _, houseId in ipairs(EnabledAuctionHouses) do
+            overrideHouse = overrideHouse + houseId
+        end
+        if overrideHouse > 1 then
+            AHBot_SellItems(_, _, _, overrideHouse)
+            SendMessageToGMs("GM "..name.." has force added " .. ActionsPerCycle .. " auctions to auction house(s) ".. houseList)
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on all auction houses: ".. houseList)
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. No auction houses enabled in AH bot config.")
+        end
+        return false
+    elseif command:lower():find("ahbot auctions add (%d+)") then
+        local _, _, houseId = command:lower():find("ahbot auctions add (%d+)")
+        if houseId then
+            houseId = tonumber(houseId)
+            if houseId == 2 or houseId == 6 or houseId == 7 then
+                local houseEnabled = false
+                for _, enabledId in ipairs(EnabledAuctionHouses) do
+                    if enabledId == houseId then
+                        houseEnabled = true
+                        AHBot_SellItems(_, _, _, houseId)
+                        SendMessageToGMs("GM "..player:GetName().." has force added " .. ActionsPerCycle .. " auctions to auction house ID "..houseId..".")
+                        print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." force added auctions on auction house "..houseId..".")
+                        break
+                    end
+                end
+                if not houseEnabled then
+                    player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Auction house not found or disabled in AH bot config.")
+                end
+            else
+                player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Auction house not found or disabled in AH bot config.")
+            end
+        end
+        return false
+        
+    elseif command:lower() == "ahbot stop" then
+        player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Please use either '.ahbot stop sell' or '.ahbot stop buy'.")
+        return false
+    elseif command:lower() == "ahbot stop sell" then
+        RemoveEventById(AHBotSellEventId)
+        AHBotSellEventId = nil
+        NextAHBotSellCycle = nil
+        SendMessageToGMs("GM "..name.." has force stopped the auction house seller on all auction houses.")
+        print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just stopped the auction bot seller.")
+        return false
+    elseif command:lower() == "ahbot stop buy" then
+        RemoveEventById(AHBotBuyEventId)
+        AHBotBuyEventId = nil
+        NextAHBotBuyCycle = nil
+        SendMessageToGMs("GM "..name.." has force stopped the auction house buyer on all auction houses.")
+        print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just stopped the auction bot buyer.")
+        return false
+        
+    elseif command:lower() == "ahbot pause" then
+        player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid pause time! Please specify a duration between 1 to 24 hours.")
+        return false
+    elseif command:find("ahbot pause ") then
+        local _, _, pauseTime = command:find("ahbot pause (%d+)")
+        if pauseTime and tonumber(pauseTime) >= 1 and tonumber(pauseTime) <= 24 then
+            pauseTime = tonumber(pauseTime)
+            RemoveEventById(AHBotSellEventId)
+            RemoveEventById(AHBotBuyEventId)
+            AHBotBuyEventId = CreateLuaEvent(AHBot_BuyAuction, AHBuyTimer * pauseTime * 65 * 60 * 1000, 0)
+            AHBotSellEventId = CreateLuaEvent(AHBot_SellItems, AHSellTimer * pauseTime * 60 * 60 * 1000, 0)
+            NextAHBotSellCycle = os.time() + pauseTime * 60 * 60
+            SendMessageToGMs("GM "..name.." has paused all auction house bots for "..pauseTime.." hours.")
+            print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." just paused the auction bot for " .. pauseTime .. " hours.")
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid pause time! Please specify a number between 1 and 24.")
+        end
+        return false
+        
+    elseif command:find("ahbot set batchsize ") then
+        local batchsize = tonumber(command:match("ahbot%s+set%s+batchsize%s+(%d+)"))
+        if batchsize and tonumber(batchsize) >= 1 and tonumber(batchsize) <= MaxAuctions then
+            batchsize = tonumber(batchsize)
+            ActionsPerCycle = batchsize
+            SendMessageToGMs("GM "..name.." has set the auction house bots' batch size to "..batchsize..".")
+            print("[Eluna AH Bot]: Player "..player:GetGUIDLow().." just changed the auction bot's batch size to "..batchsize..".")
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid batch size! Please specify a number between 1 and "..MaxAuctions..".")
+        end
+        return false
+        
+    elseif command:find("ahbot set sellcycle ") then
+        local hours = tonumber(command:match("ahbot%s+set%s+sellcycle%s+(%d+)"))
+        if hours and tonumber(hours) >= 1 and tonumber(hours) <= 48 then
+            hours = tonumber(hours)
+            AHSellTimer = hours
+            SendMessageToGMs("GM "..name.." has set the auction house bot's sell cycle time has been set to "..hours.." hours. Next cycle is in "..hours.." hour(s) from now.")
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just changed the auction bot's sell cycle time to "..hours.." hour(s).")
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid sell cycle time! Please specify a number between 1 and 48.")
+        end
+        return false
+    elseif command:find("ahbot set buycycle ") then
+        local hours = tonumber(command:match("ahbot%s+set%s+buycycle%s+([%d%.]+)"))
+        if hours and hours >= 0.1 and hours <= 48 then
+            AHBuyTimer = hours
+            SendMessageToGMs("GM "..name.." has set the auction house bot's buy cycle time has been set to %.1f minutes. Next cycle is in %.1f minutes from now.", 60 * hours, 60 * hours)
+            print(string.format("[Eluna AH Bot]: GM %d just changed the auction bot's buy cycle time to %.1f minutes.", player:GetGUIDLow(), 60 * hours))
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Invalid buy cycle time! Please specify a number between 0.1 and 48.")
+        end
+        return false
+            
+    elseif command:lower() == "ahbot start" then
+        player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Incorrect syntax. Use either '.ahbot start sell' or '.ahbot start buy'.")
+        return false
+    elseif command:lower() == "ahbot start buy" then
+        if not AHBotBuyEventId then
+            AHBotBuyEventId = CreateLuaEvent(AHBot_BuyAuction, AHBuyTimer * 65 * 60 * 1000, 0)
+            NextAHBotBuyCycle = os.time() + AHBuyTimer * 60 * 60
+            SendMessageToGMs("GM "..name.." has just started the auction house buyer bot.")
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just started the auction bot buyer.")
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Auction house buyer has already been started. No action taken.")
+        end
+        return false
+    elseif command:lower() == "ahbot start sell" then
+        if not AHBotSellEventId then
+            AHBotSellEventId = CreateLuaEvent(AHBot_SellItems, AHSellTimer * 60 * 60 * 1000, 0)
+            NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
+            SendMessageToGMs("GM "..name.." has just started the auction house seller bot.")
+            print("[Eluna AH Bot]: GM "..player:GetGUIDLow().." just started the auction bot seller.")
+        else
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Auction house seller has already been started. No action taken.")
+        end
+        return false
+    
+    elseif command:find("ahbot.+") then
+        player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Syntax error. Type .ahbot to see available commands.")
+        return false
+    end
 end
 
 RegisterPlayerEvent(42, AHBot_Cmd)
@@ -1534,13 +1534,13 @@ RegisterPlayerEvent(42, AHBot_Cmd)
 ---------------------------------------------------------------------------------
 
 if AnnounceOnLogin then
-	local function OnPlayerLogin(event, player)
-		player:SendBroadcastMessage("This server runs the |cFFD8D8E6[Eluna AH Bot]|r module by mostlynick :)")
-		if player:GetGMRank() > 0 then
-			player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Type '.ahbot' to manage, set cache settings, and display statistics.")
-		end
-	end
-	RegisterPlayerEvent(3, OnPlayerLogin)
+    local function OnPlayerLogin(event, player)
+        player:SendBroadcastMessage("This server runs the |cFFD8D8E6[Eluna AH Bot]|r module by mostlynick :)")
+        if player:GetGMRank() > 0 then
+            player:SendBroadcastMessage("|cFFD8D8E6[Eluna AH Bot GM]|r: Type '.ahbot' to manage, set cache settings, and display statistics.")
+        end
+    end
+    RegisterPlayerEvent(3, OnPlayerLogin)
 end
 
 ---------------------------------------------------------------------------------
