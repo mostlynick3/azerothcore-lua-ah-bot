@@ -9,6 +9,12 @@
 -- You may freely use this file for emulation purposes. It is released under this repository's GPL v3 license: https://github.com/mostlynick3/azerothcore-lua-ah-bot
 --
 -------------------------------------------------------------------------------------------------------------------------
+-- Multistate support
+-------------------------------------------------------------------------------------------------------------------------
+
+if GetStateMapId() ~= -1 then return end
+
+-------------------------------------------------------------------------------------------------------------------------
 -- AH Bot Configs
 -------------------------------------------------------------------------------------------------------------------------
 
@@ -201,7 +207,8 @@ local AHBotBuyEventId										-- Used to track if the indefinite Lua event for 
 local botList = table.concat(AHBots, ",") 					-- Converts table to a string for SQL and concat interaction
 local houseList = table.concat(EnabledAuctionHouses, ",")	-- Converts table to a string for SQL and concat interaction
 local postedAuctions = {} 									-- Counts how many auctions have been posted by the auction bots last. Used in info cmd
-local EnchantmentModule = require("EnchantmentModule")			-- For random item properties
+local EnchantmentModule = require("EnchantmentModule")	    -- For random item properties
+require("AHBot_Helpers")
 
 -- Early returns and MySQL error failsafes
 if not EnabledAuctionHouses then error("[Eluna AH Bot]: Core - No valid auction houses found!") end
@@ -415,37 +422,6 @@ local function CheckAuctions(houseId, callback)
         end
         callback(count)
     end)
-end
-
-function bitAnd(a, b)
-    local result = 0
-    local shift = 0
-    while a > 0 or b > 0 do
-        -- Check the least significant bit of both numbers
-        if a % 2 == 1 and b % 2 == 1 then
-            result = result + 2^shift
-        end
-        -- Right shift both numbers by 1 (essentially dividing by 2)
-        a = math.floor(a / 2)
-        b = math.floor(b / 2)
-        shift = shift + 1
-    end
-    return result
-end
-
--- Helper function to convert Quality number to string key
-local function getQualityString(Quality)
-    local QualityStrings = {
-        [0] = "Gray/Poor",
-        [1] = "White/Common",
-        [2] = "Green/Uncommon",
-        [3] = "Blue/Rare",
-        [4] = "Purple/Epic",
-        [5] = "Orange/Legendary",
-        [6] = "Red/Artifact",
-        [7] = "Gold/Heirloom"
-    }
-    return QualityStrings[Quality]
 end
 
 local function SelectRandomItems()
@@ -825,76 +801,6 @@ end
 local currentHouse = 0
 local lastAuctionId
 
-local function ProcessItemCreation(selectedItems, houseId, availableGuids, availableIds)
-    local itemQueryParts = {}
-    local auctionQueryParts = {}
-    local auctionCount = 0
-    
-    for _, item in ipairs(selectedItems) do
-        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Processing item "..item.name) end
-        
-        local isAllowed = IsItemAllowedForHouse(item, houseId)
-        
-        if not isAllowed then
-            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Removing item " .. item.name .. " from queue due to belonging to another faction than auction house ID "..houseId) end
-        else
-            auctionCount = auctionCount + 1
-            lastItemId = availableGuids[1]
-            table.remove(availableGuids, 1)
-            lastAuctionId = availableIds[1]
-            table.remove(availableIds, 1)
-            
-            local randomBot = AHBots[math.random(1, #AHBots)]
-            local cost = CalculateItemCost(item, randomBot)
-            local stack = CalculateStackSize(item)
-            local expireTime = os.time() + math.random(6 * 3600, 48 * 3600)
-            
-            cost = cost * stack
-            
-            if SellPriceVariance then
-                cost = cost * math.random(1 - (SellPriceVariance/100), 1 + (SellPriceVariance/100))
-            end
-            
-            cost = math.floor(cost)
-            local startBid = math.floor(cost * (math.random(51, 90) / 100))
-            
-            local randomStats, enchantString = EnchantmentModule.ApplyRandomEnchantments(item)
-            
-            -- Add item_instance entry
-            table.insert(itemQueryParts, "(" .. lastItemId .. ", " .. item.entry .. ", " .. randomBot .. ", " .. item.craftedBy .. ", 0, " .. stack .. ", 0, '" ..
-                item.c1 .. " " .. item.c2 .. " " .. item.c3 .. " " .. item.c4 .. " " .. item.c5 .. "', 0, '"..enchantString.."', " ..
-                randomStats .. ", " .. item.durability .. ", "..item.duration..", '')")
-
-            -- Add auction entry
-            table.insert(auctionQueryParts, string.format("(%d, %d, %d, %d, %d, %d, 0, 0, %d, 1, %d)",
-                lastAuctionId, houseId, lastItemId, randomBot, cost, expireTime, startBid, AddedByEluna))
-        end
-    end
-    
-    if #itemQueryParts > 0 and #auctionQueryParts > 0 then
-        ExecuteItemAndAuctionQueries(itemQueryParts, auctionQueryParts, auctionCount, houseId)
-    end
-end
-
-local function IsItemAllowedForHouse(item, houseId)
-    if houseId == 7 or item.race == 2147483647 or item.race == -1 then 
-        return true
-    elseif houseId == 2 then -- Alliance AH
-        for _, race in ipairs(AllowedAllyRaces) do
-            if (bitAnd(item.race, race) ~= 0) then 
-                return true
-            end
-        end
-    elseif houseId == 6 then -- Horde AH
-        for _, race in ipairs(AllowedHordeRaces) do
-            if (bitAnd(item.race, race) ~= 0) then
-                return true
-            end
-        end
-    end
-    return false
-end
-
 local function CalculateItemCost(item, randomBot)
     local cost = ChooseCostFormula(CostFormula, item)
     
@@ -977,47 +883,90 @@ local function CalculateStackSize(item)
     return stack
 end
 
-local function ExecuteItemAndAuctionQueries(itemQueryParts, auctionQueryParts, auctionCount, houseId)
-    local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
-    local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
+local function ProcessItemCreation(selectedItems, houseId, availableGuids, availableIds)
+    local itemQueryParts = {}
+    local auctionQueryParts = {}
+    local auctionCount = 0
     
-    CharDBQueryAsync(itemQuery, function(results)
-        CharDBQueryAsync(auctionQuery, function(results)
-            HandleAuctionCompletion(auctionCount, houseId)
-        end)
-    end)
-end
-
-local function HandleAuctionCompletion(auctionCount, houseId)
-    if AHBotActionDebug then 
-        print("[Eluna AH Bot Debug]: Seller - " .. auctionCount .. " auctions added to auction house no. " .. houseId .. ".") 
-    end
-    
-    currentHouse = currentHouse - houseId
-    
-    if currentHouse == 0 then
-        if BuyOnStartup then
-            if AHBotActionDebug then 
-                print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, proceeding to initiate buyers...") 
-            end
-            AHBot_BuyAuction()
-            SendMessageToGMs("AH bot sellers initiated. Starting buyers...")
-            return
-        end
+    for _, item in ipairs(selectedItems) do
+        if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Processing item "..item.name) end
         
-        if AHBotActionDebug then 
-            print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") 
+        local isAllowed = IsItemAllowedForHouse(item, houseId)
+        
+        if not isAllowed then
+            if AHBotItemDebug then print("[Eluna AH Bot Item Debug]: Removing item " .. item.name .. " from queue due to belonging to another faction than auction house ID "..houseId) end
+        else
+            auctionCount = auctionCount + 1
+            lastItemId = availableGuids[1]
+            table.remove(availableGuids, 1)
+            lastAuctionId = availableIds[1]
+            table.remove(availableIds, 1)
+            
+            local randomBot = AHBots[math.random(1, #AHBots)]
+            local cost = CalculateItemCost(item, randomBot)
+            local stack = CalculateStackSize(item)
+            local expireTime = os.time() + math.random(6 * 3600, 48 * 3600)
+            
+            cost = cost * stack
+            
+            if SellPriceVariance then
+                cost = cost * math.random(1 - (SellPriceVariance/100), 1 + (SellPriceVariance/100))
+            end
+            
+            cost = math.floor(cost)
+            local startBid = math.floor(cost * (math.random(51, 90) / 100))
+            
+            local randomStats, enchantString = EnchantmentModule.ApplyRandomEnchantments(item)
+            
+            -- Add item_instance entry
+            table.insert(itemQueryParts, "(" .. lastItemId .. ", " .. item.entry .. ", " .. randomBot .. ", " .. item.craftedBy .. ", 0, " .. stack .. ", 0, '" ..
+                item.c1 .. " " .. item.c2 .. " " .. item.c3 .. " " .. item.c4 .. " " .. item.c5 .. "', 0, '"..enchantString.."', " ..
+                randomStats .. ", " .. item.durability .. ", "..item.duration..", '')")
+
+            -- Add auction entry
+            table.insert(auctionQueryParts, string.format("(%d, %d, %d, %d, %d, %d, 0, 0, %d, 1, %d)",
+                lastAuctionId, houseId, lastItemId, randomBot, cost, expireTime, startBid, AddedByEluna))
         end
-        SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
-        RunCommand("reload auctions")
-        NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
-        return
     end
     
-    if AHBotActionDebug then 
-        print("[Eluna AH Bot Debug]: Seller - Scheduling processing of next house ID.") 
+    if #itemQueryParts > 0 and #auctionQueryParts > 0 then
+		local itemQuery = "INSERT INTO item_instance (guid, itemEntry, owner_guid, creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, playedTime, text) VALUES " .. table.concat(itemQueryParts, ",")
+		local auctionQuery = "INSERT INTO auctionhouse (id, houseid, itemguid, itemowner, buyoutprice, time, buyguid, lastbid, startbid, deposit, AddedByEluna) VALUES " .. table.concat(auctionQueryParts, ",")
+		
+		CharDBQueryAsync(itemQuery, function(results) -- Instantiate items in database
+			CharDBQueryAsync(auctionQuery, function(results) -- Add auctions to database
+				if AHBotActionDebug then 
+					print("[Eluna AH Bot Debug]: Seller - " .. auctionCount .. " auctions added to auction house no. " .. houseId .. ".") 
+				end
+				
+				currentHouse = currentHouse - houseId
+				
+				if currentHouse == 0 then
+					if BuyOnStartup then
+						if AHBotActionDebug then 
+							print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, proceeding to initiate buyers...") 
+						end
+						AHBot_BuyAuction()
+						SendMessageToGMs("AH bot sellers initiated. Starting buyers...")
+						return
+					end
+					
+					if AHBotActionDebug then 
+						print("[Eluna AH Bot Debug]: Seller - Done processing all included auction houses, instantiating auctions!") 
+					end
+					SendMessageToGMs("Refreshing auctions cache to pick up new bot auctions...")
+					RunCommand("reload auctions")
+					NextAHBotSellCycle = os.time() + AHSellTimer * 60 * 60
+					return
+				end
+				
+				if AHBotActionDebug then 
+					print("[Eluna AH Bot Debug]: Seller - Scheduling processing of next house ID.") 
+				end
+				AddAuctions() -- Check if more auctions are scheduled in other auction houses
+			end)
+		end)
     end
-    AddAuctions()
 end
 
 local function ProcessAuctionIds(result, selectedItems, houseId, availableGuids)
@@ -1163,7 +1112,7 @@ local function ProcessAuctionCheck(auctionCount, houseId)
     end
 end
 
-local function AddAuctions(specificHouse)
+function AddAuctions(specificHouse)
     local houseId = 0
     
     if specificHouse then currentHouse = specificHouse end
@@ -1392,9 +1341,9 @@ local function AHBot_Cmd(event, player, command)
 		player:SendBroadcastMessage("|- Next auction house bot buy cycle: in " .. math.ceil((NextAHBotBuyCycle - os.time()) / 60) .. " minutes")
 		local status
 		if AHBotSellEventId then status = "Online" else status = "Offline" end
-		player:SendBroadcastMessage("Status auction house bot seller service: "..status)
+		player:SendBroadcastMessage("|- Status auction house bot seller service: "..status)
 		if AHBotBuyEventId then status = "Online" else status = "Offline" end
-		player:SendBroadcastMessage("Status auction house bot buyer service: "..status)
+		player:SendBroadcastMessage("|- Status auction house bot buyer service: "..status)
 		return false
 		
 	elseif command:lower() == "ahbot auctions expire" or command == "ahbot auctions expire all" then
