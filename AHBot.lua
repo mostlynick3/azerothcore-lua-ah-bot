@@ -27,6 +27,7 @@ local ActionsPerCycle       = 500            -- Default: 500 (items). The higher
 local StartupDelay          = 1000           -- Default: 1000 (ms). Delay after startup/Eluna reload before the auction house initializes. Having this set to 0 will cause lag on initial world load. 
 local EnableGMMessages      = true           -- Default: True. Messages all online GMs on command and initiation events.
 local AnnounceOnLogin       = true           -- Default: True. Announces to all players on login that this server runs the Eluna AH Bot module.
+local ClearBotMailbox       = false          -- Default: False. If enabled, periodically clears bots' mailbox. Ensures no overflow from bot mailbox filling up with expired/sold/bought auctions.
 
 -------------------------------------------------------------------------------------------------------------------------
 -- Buyer Configs
@@ -1146,6 +1147,28 @@ local function AHBot_SellItems(_, _, _, specificHouse)
         currentHouse = specificHouse
     end
     AddAuctions(specificHouse)
+end
+
+---------------------------------------------------------------------------------
+-- Clear bot mailboxes
+---------------------------------------------------------------------------------
+
+if ClearBotMailbox then
+    CreateLuaEvent(function()
+        for _, botGUIDLow in ipairs(AHBots) do
+            local botOnline = false
+            for _, player in pairs(GetPlayersInWorld()) do
+                if player:GetGUIDLow() == botGUIDLow then
+                    botOnline = true
+                    break
+                end
+            end
+            if not botOnline then
+                CharDBExecute("DELETE FROM mail WHERE receiver = " .. botGUIDLow)
+                CharDBExecute("DELETE FROM mail_items WHERE receiver = " .. botGUIDLow)
+            end
+        end
+    end, 60000, 0)
 end
 
 ---------------------------------------------------------------------------------
