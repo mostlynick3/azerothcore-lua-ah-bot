@@ -629,7 +629,7 @@ local function AHBot_Buy_ProcessItemResults(itemResults, auctionResults)
     AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
 end
 
-local function AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
+function AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
     local transactions = {}
     
     for _, item in ipairs(underpricedItems) do
@@ -695,7 +695,7 @@ local function AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
     end
 end
 
-local function AHBot_Buy_ExecuteTransactions(transactions)
+function AHBot_Buy_ExecuteTransactions(transactions)
     local ids = {}
     local buyguidCases = {}
     local lastbidCases = {}
