@@ -304,7 +304,7 @@ if EnableItemFilters then
     
     -- Class restrictions
     if AllowedClassItems then
-        local classFilter = AllowGlyphs and "(class = 16 OR AllowableClass IN (" or "AllowableClass IN ("
+        local classFilter = AllowGlyphs and "(class = 16 OR AllowableClass IN (" or "(AllowableClass IN ("
         table.insert(conditions, classFilter .. table.concat(AllowedClassItems, ',') .. "))")
     end
     
