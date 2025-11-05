@@ -111,10 +111,11 @@ local AllowConjured            = false                           -- Default: Fal
 -- The way it works is that it feeds all the items of the class/ID X times into the weight tables,
 -- increasing the bool we can pick items from with duplicates of higher weighted categories.
 -- Increasing one value will supplant the value of the other values.
+-- Each weight number must be an integer, otherwise its category will be skipped
 local ItemWeights = {
     Gear = {
         ["Gray/Poor"]            = 0,
-        ["White/Common"]         = 0.1,
+        ["White/Common"]         = 1,
         ["Green/Uncommon"]       = 25,
         ["Blue/Rare"]            = 15,
         ["Purple/Epic"]          = 5,
