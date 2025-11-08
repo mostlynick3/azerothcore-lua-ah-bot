@@ -912,7 +912,9 @@ local function ProcessItemCreation(selectedItems, houseId, availableGuids, avail
             cost = cost * stack
             
             if SellPriceVariance then
-                cost = cost * math.random(1 - (SellPriceVariance/100), 1 + (SellPriceVariance/100))
+                local minCost = cost * (1 - (SellPriceVariance/100))
+                local maxCost = cost * (1 + (SellPriceVariance/100))
+                cost = math.random(math.floor(minCost), math.floor(maxCost))
             end
             
             cost = math.floor(cost)
