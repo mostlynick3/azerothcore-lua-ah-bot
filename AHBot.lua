@@ -674,7 +674,7 @@ function AHBot_Buy_ProcessTransactions(underpricedItems, auctionResults)
                         transactionType = "buyout"
                         price = matchingAuction.buyoutprice
                     else
-                        price = math.random(minBid, maxBid)
+                        price = randomFloatBetween(minBid, maxBid)
                     end
                 end
                 
@@ -912,9 +912,7 @@ local function ProcessItemCreation(selectedItems, houseId, availableGuids, avail
             cost = cost * stack
             
             if SellPriceVariance then
-                local minCost = cost * (1 - (SellPriceVariance/100))
-                local maxCost = cost * (1 + (SellPriceVariance/100))
-                cost = math.random(math.floor(minCost), math.floor(maxCost))
+                cost = cost * randomFloatBetween(1 - (SellPriceVariance/100), 1 + (SellPriceVariance/100))
             end
             
             cost = math.floor(cost)
